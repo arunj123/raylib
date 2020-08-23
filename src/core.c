@@ -1345,6 +1345,10 @@ void EndDrawing(void)
 #endif
 
     SwapBuffers();                  // Copy back buffer to front buffer
+
+}
+
+void CompleteFrame(void) {
     PollInputEvents();              // Poll user events
 
     // Frame time control system
@@ -2311,6 +2315,60 @@ void SaveStorageValue(unsigned int position, int value)
     }
 #endif
 }
+
+#if defined(PLATFORM_RPI)
+
+EGLImageKHR CreateEglImageKHR(Texture2D *t) {
+
+    t->mipmaps = 1;
+    t->format = UNCOMPRESSED_R8G8B8A8;
+
+    // Generate a texture object
+    glGenTextures ( 1, &t->id );
+
+    // Bind the texture object
+    glBindTexture ( GL_TEXTURE_2D, t->id );
+
+    // Load the texture
+    glTexImage2D ( GL_TEXTURE_2D, 0, GL_RGBA, 
+            t->width, t->height, 
+            0, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
+
+    // Set the filtering mode
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    EGLenum target = EGL_GL_TEXTURE_2D_KHR;
+    EGLClientBuffer buffer = (EGLClientBuffer)t->id;
+    const EGLint *attrib_list = NULL;
+    EGLImageKHR eglImage =  eglCreateImageKHR(
+                            CORE.Window.device  /* EGLDisplay dpy */,
+                            CORE.Window.context /*  EGLContext ctx */,
+                            target,
+                            buffer,
+                            attrib_list);
+
+    if (eglImage == EGL_NO_IMAGE_KHR)
+    {
+        printf("eglCreateImageKHR failed.\n");
+    }
+
+    glBindTexture ( GL_TEXTURE_2D, 0 );
+
+    return eglImage;
+}
+
+void DestroyEglImageKHR(EGLImageKHR eglImage) {
+    EGLBoolean ast =  eglDestroyImageKHR(
+                        CORE.Window.device  /* EGLDisplay dpy */,
+                        eglImage);
+
+}
+#endif
 
 // Load integer value from storage file (from defined position)
 // NOTE: If requested position could not be found, value 0 is returned
