@@ -119,7 +119,7 @@
 #if !defined(EXTERNAL_CONFIG_FLAGS)
     #include "config.h"             // Defines module configuration flags
 #else
-    #define RAYLIB_VERSION  "3.0"
+    #define RAYLIB_VERSION  "3.1-dev"
 #endif
 
 #include "utils.h"                  // Required for: TRACELOG macros
@@ -269,15 +269,8 @@
 #if defined(PLATFORM_RPI)
     #define USE_LAST_TOUCH_DEVICE       // When multiple touchscreens are connected, only use the one with the highest event<N> number
 
-    // Old device inputs system
-    #define DEFAULT_KEYBOARD_DEV      STDIN_FILENO              // Standard input
-    #define DEFAULT_GAMEPAD_DEV       "/dev/input/js"           // Gamepad input (base dev for all gamepads: js0, js1, ...)
-    #define DEFAULT_EVDEV_PATH        "/dev/input/"             // Path to the linux input events
-
-    // New device input events (evdev) (must be detected)
-    //#define DEFAULT_KEYBOARD_DEV    "/dev/input/eventN"
-    //#define DEFAULT_MOUSE_DEV       "/dev/input/eventN"
-    //#define DEFAULT_GAMEPAD_DEV     "/dev/input/eventN"
+    #define DEFAULT_GAMEPAD_DEV    "/dev/input/js"      // Gamepad input (base dev for all gamepads: js0, js1, ...)
+    #define DEFAULT_EVDEV_PATH       "/dev/input/"      // Path to the linux input events
 #endif
 
 #ifndef MAX_FILEPATH_LENGTH
@@ -386,7 +379,7 @@ typedef struct CoreData {
 #endif
 #if defined(PLATFORM_UWP)
     struct {
-        const char* internalDataPath;       // UWP App data path
+        const char *internalDataPath;       // UWP App data path
     } UWP;
 #endif
     struct {
@@ -413,9 +406,7 @@ typedef struct CoreData {
 
             bool cursorHidden;              // Track if cursor is hidden
             bool cursorOnScreen;            // Tracks if cursor is inside client area
-#if defined(PLATFORM_WEB)
-            bool cursorLockRequired;        // Ask for cursor pointer lock on next click
-#endif
+
             char currentButtonState[3];     // Registers current mouse button state
             char previousButtonState[3];    // Registers previous mouse button state
             int currentWheelMove;           // Registers current mouse wheel variation
@@ -519,6 +510,7 @@ static int32_t AndroidInputCallback(struct android_app *app, AInputEvent *event)
 
 #if defined(PLATFORM_WEB)
 static EM_BOOL EmscriptenFullscreenChangeCallback(int eventType, const EmscriptenFullscreenChangeEvent *event, void *userData);
+static EM_BOOL EmscriptenWindowResizedCallback(int eventType, const void *reserved, void *userData);
 static EM_BOOL EmscriptenKeyboardCallback(int eventType, const EmscriptenKeyboardEvent *keyEvent, void *userData);
 static EM_BOOL EmscriptenMouseCallback(int eventType, const EmscriptenMouseEvent *mouseEvent, void *userData);
 static EM_BOOL EmscriptenTouchCallback(int eventType, const EmscriptenTouchEvent *touchEvent, void *userData);
@@ -629,7 +621,7 @@ void InitWindow(int width, int height, const char *title)
 
     TRACELOG(LOG_INFO, "Initializing raylib %s", RAYLIB_VERSION);
 
-    CORE.Window.title = title;
+    if ((title != NULL) && (title[0] != 0)) CORE.Window.title = title;
 
     // Initialize required global values different than 0
     CORE.Input.Keyboard.exitKey = KEY_ESCAPE;
@@ -739,7 +731,8 @@ void InitWindow(int width, int height, const char *title)
     emscripten_set_fullscreenchange_callback("#canvas", NULL, 1, EmscriptenFullscreenChangeCallback);
 
     // Support keyboard events
-    emscripten_set_keypress_callback("#canvas", NULL, 1, EmscriptenKeyboardCallback);
+    //emscripten_set_keypress_callback("#canvas", NULL, 1, EmscriptenKeyboardCallback);
+    emscripten_set_keydown_callback("#canvas", NULL, 1, EmscriptenKeyboardCallback);
 
     // Support mouse events
     emscripten_set_click_callback("#canvas", NULL, 1, EmscriptenMouseCallback);
@@ -856,6 +849,9 @@ bool WindowShouldClose(void)
         while (!CORE.Window.alwaysRun && CORE.Window.minimized) glfwWaitEvents();
 
         CORE.Window.shouldClose = glfwWindowShouldClose(CORE.Window.handle);
+        
+        // Reset close status for next frame
+        glfwSetWindowShouldClose(CORE.Window.handle, GLFW_FALSE);
 
         return CORE.Window.shouldClose;
     }
@@ -916,11 +912,9 @@ bool IsWindowFullscreen(void)
 // Toggle fullscreen mode (only PLATFORM_DESKTOP)
 void ToggleFullscreen(void)
 {
-    CORE.Window.fullscreen = !CORE.Window.fullscreen;          // Toggle fullscreen flag
-
 #if defined(PLATFORM_DESKTOP)
     // NOTE: glfwSetWindowMonitor() doesn't work properly (bugs)
-    if (CORE.Window.fullscreen)
+    if (!CORE.Window.fullscreen)
     {
         // Store previous window position (in case we exit fullscreen)
         glfwGetWindowPos(CORE.Window.handle, &CORE.Window.position.x, &CORE.Window.position.y);
@@ -943,12 +937,44 @@ void ToggleFullscreen(void)
     else glfwSetWindowMonitor(CORE.Window.handle, NULL, CORE.Window.position.x, CORE.Window.position.y, CORE.Window.screen.width, CORE.Window.screen.height, GLFW_DONT_CARE);
 #endif
 #if defined(PLATFORM_WEB)
-    if (CORE.Window.fullscreen) EM_ASM(Module.requestFullscreen(false, false););
-    else EM_ASM(document.exitFullscreen(););
+    /*
+    EM_ASM(
+        if (document.fullscreenElement) document.exitFullscreen();
+        else Module.requestFullscreen(true, true);
+    );
+    */
+    
+    //EM_ASM(Module.requestFullscreen(false, false););
+
+    /*
+    if (!CORE.Window.fullscreen)
+    {
+        //https://github.com/emscripten-core/emscripten/issues/5124
+        EmscriptenFullscreenStrategy strategy = {
+            .scaleMode = EMSCRIPTEN_FULLSCREEN_SCALE_STRETCH, //EMSCRIPTEN_FULLSCREEN_SCALE_ASPECT,
+            .canvasResolutionScaleMode = EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_STDDEF,
+            .filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_DEFAULT,
+            .canvasResizedCallback = EmscriptenWindowResizedCallback, //on_canvassize_changed,
+            .canvasResizedCallbackUserData = NULL
+        };
+        
+        emscripten_request_fullscreen("#canvas", false);
+        //emscripten_request_fullscreen_strategy("#canvas", EM_FALSE, &strategy);
+        //emscripten_enter_soft_fullscreen("canvas", &strategy);
+        TRACELOG(LOG_INFO, "emscripten_request_fullscreen_strategy");
+    }
+    else 
+    {
+        TRACELOG(LOG_INFO, "emscripten_exit_fullscreen");
+        emscripten_exit_fullscreen();
+    }
+    */
 #endif
 #if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI)
     TRACELOG(LOG_WARNING, "SYSTEM: Failed to toggle to windowed mode");
 #endif
+
+    CORE.Window.fullscreen = !CORE.Window.fullscreen;          // Toggle fullscreen flag
 }
 
 // Set icon for window (only PLATFORM_DESKTOP)
@@ -1163,6 +1189,22 @@ int GetMonitorPhysicalHeight(int monitor)
     return 0;
 }
 
+int GetMonitorRefreshRate(int monitor)
+{
+#if defined(PLATFORM_DESKTOP)
+    int monitorCount;
+    GLFWmonitor **monitors = glfwGetMonitors(&monitorCount);
+
+    if ((monitor >= 0) && (monitor < monitorCount))
+    {
+        const GLFWvidmode *vidmode = glfwGetVideoMode(monitors[monitor]);
+        return vidmode->refreshRate;
+    }
+    else TRACELOG(LOG_WARNING, "GLFW: Failed to find selected monitor");
+#endif
+    return 0;
+}
+
 // Get window position XY on monitor
 Vector2 GetWindowPosition(void)
 {
@@ -1260,9 +1302,6 @@ void EnableCursor(void)
 #if defined(PLATFORM_DESKTOP)
     glfwSetInputMode(CORE.Window.handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 #endif
-#if defined(PLATFORM_WEB)
-    CORE.Input.Mouse.cursorLockRequired = true;
-#endif
 #if defined(PLATFORM_UWP)
     UWPGetMouseUnlockFunc()();
 #endif
@@ -1275,13 +1314,16 @@ void DisableCursor(void)
 #if defined(PLATFORM_DESKTOP)
     glfwSetInputMode(CORE.Window.handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 #endif
-#if defined(PLATFORM_WEB)
-    CORE.Input.Mouse.cursorLockRequired = true;
-#endif
 #if defined(PLATFORM_UWP)
     UWPGetMouseLockFunc()();
 #endif
     CORE.Input.Mouse.cursorHidden = true;
+}
+
+// Check if cursor is on the current screen.
+bool IsCursorOnScreen(void)
+{
+    return CORE.Input.Mouse.cursorOnScreen;
 }
 
 // Set background color (framebuffer clear color)
@@ -1408,7 +1450,7 @@ void BeginMode3D(Camera3D camera)
     if (camera.type == CAMERA_PERSPECTIVE)
     {
         // Setup perspective projection
-        double top = 0.01*tan(camera.fovy*0.5*DEG2RAD);
+        double top = RL_CULL_DISTANCE_NEAR*tan(camera.fovy*0.5*DEG2RAD);
         double right = top*aspect;
 
         rlFrustum(-right, right, -top, top, RL_CULL_DISTANCE_NEAR, RL_CULL_DISTANCE_FAR);
@@ -1500,7 +1542,7 @@ void BeginScissorMode(int x, int y, int width, int height)
     rlglDraw(); // Force drawing elements
 
     rlEnableScissorTest();
-    rlScissor(x, GetScreenHeight() - (y + height), width, height);
+    rlScissor(x, CORE.Window.currentFbo.height - (y + height), width, height);
 }
 
 // End scissor mode
@@ -1731,160 +1773,6 @@ double GetTime(void)
 #endif
 }
 
-// Returns hexadecimal value for a Color
-int ColorToInt(Color color)
-{
-    return (((int)color.r << 24) | ((int)color.g << 16) | ((int)color.b << 8) | (int)color.a);
-}
-
-// Returns color normalized as float [0..1]
-Vector4 ColorNormalize(Color color)
-{
-    Vector4 result;
-
-    result.x = (float)color.r/255.0f;
-    result.y = (float)color.g/255.0f;
-    result.z = (float)color.b/255.0f;
-    result.w = (float)color.a/255.0f;
-
-    return result;
-}
-
-// Returns color from normalized values [0..1]
-Color ColorFromNormalized(Vector4 normalized)
-{
-    Color result;
-
-    result.r = (unsigned char)(normalized.x*255.0f);
-    result.g = (unsigned char)(normalized.y*255.0f);
-    result.b = (unsigned char)(normalized.z*255.0f);
-    result.a = (unsigned char)(normalized.w*255.0f);
-
-    return result;
-}
-
-// Returns HSV values for a Color
-// NOTE: Hue is returned as degrees [0..360]
-Vector3 ColorToHSV(Color color)
-{
-    Vector3 hsv = { 0 };
-    Vector3 rgb = { (float)color.r/255.0f, (float)color.g/255.0f, (float)color.b/255.0f };
-    float min, max, delta;
-
-    min = rgb.x < rgb.y? rgb.x : rgb.y;
-    min = min  < rgb.z? min  : rgb.z;
-
-    max = rgb.x > rgb.y? rgb.x : rgb.y;
-    max = max  > rgb.z? max  : rgb.z;
-
-    hsv.z = max;            // Value
-    delta = max - min;
-
-    if (delta < 0.00001f)
-    {
-        hsv.y = 0.0f;
-        hsv.x = 0.0f;       // Undefined, maybe NAN?
-        return hsv;
-    }
-
-    if (max > 0.0f)
-    {
-        // NOTE: If max is 0, this divide would cause a crash
-        hsv.y = (delta/max);    // Saturation
-    }
-    else
-    {
-        // NOTE: If max is 0, then r = g = b = 0, s = 0, h is undefined
-        hsv.y = 0.0f;
-        hsv.x = NAN;        // Undefined
-        return hsv;
-    }
-
-    // NOTE: Comparing float values could not work properly
-    if (rgb.x >= max) hsv.x = (rgb.y - rgb.z)/delta;    // Between yellow & magenta
-    else
-    {
-        if (rgb.y >= max) hsv.x = 2.0f + (rgb.z - rgb.x)/delta;  // Between cyan & yellow
-        else hsv.x = 4.0f + (rgb.x - rgb.y)/delta;      // Between magenta & cyan
-    }
-
-    hsv.x *= 60.0f;     // Convert to degrees
-
-    if (hsv.x < 0.0f) hsv.x += 360.0f;
-
-    return hsv;
-}
-
-// Returns a Color from HSV values
-// Implementation reference: https://en.wikipedia.org/wiki/HSL_and_HSV#Alternative_HSV_conversion
-// NOTE: Color->HSV->Color conversion will not yield exactly the same color due to rounding errors
-Color ColorFromHSV(Vector3 hsv)
-{
-    Color color = { 0, 0, 0, 255 };
-    float h = hsv.x, s = hsv.y, v = hsv.z;
-
-    // Red channel
-    float k = fmodf((5.0f + h/60.0f), 6);
-    float t = 4.0f - k;
-    k = (t < k)? t : k;
-    k = (k < 1)? k : 1;
-    k = (k > 0)? k : 0;
-    color.r = (unsigned char)((v - v*s*k)*255.0f);
-
-    // Green channel
-    k = fmodf((3.0f + h/60.0f), 6);
-    t = 4.0f - k;
-    k = (t < k)? t : k;
-    k = (k < 1)? k : 1;
-    k = (k > 0)? k : 0;
-    color.g = (unsigned char)((v - v*s*k)*255.0f);
-
-    // Blue channel
-    k = fmodf((1.0f + h/60.0f), 6);
-    t = 4.0f - k;
-    k = (t < k)? t : k;
-    k = (k < 1)? k : 1;
-    k = (k > 0)? k : 0;
-    color.b = (unsigned char)((v - v*s*k)*255.0f);
-
-    return color;
-}
-
-// Returns a Color struct from hexadecimal value
-Color GetColor(int hexValue)
-{
-    Color color;
-
-    color.r = (unsigned char)(hexValue >> 24) & 0xFF;
-    color.g = (unsigned char)(hexValue >> 16) & 0xFF;
-    color.b = (unsigned char)(hexValue >> 8) & 0xFF;
-    color.a = (unsigned char)hexValue & 0xFF;
-
-    return color;
-}
-
-// Returns a random value between min and max (both included)
-int GetRandomValue(int min, int max)
-{
-    if (min > max)
-    {
-        int tmp = max;
-        max = min;
-        min = tmp;
-    }
-
-    return (rand()%(abs(max - min) + 1) + min);
-}
-
-// Color fade-in or fade-out, alpha goes from 0.0f to 1.0f
-Color Fade(Color color, float alpha)
-{
-    if (alpha < 0.0f) alpha = 0.0f;
-    else if (alpha > 1.0f) alpha = 1.0f;
-
-    return (Color){color.r, color.g, color.b, (unsigned char)(255.0f*alpha)};
-}
-
 // Setup window configuration flags (view FLAGS)
 void SetConfigFlags(unsigned int flags)
 {
@@ -1928,6 +1816,19 @@ void TakeScreenshot(const char *fileName)
 
     // TODO: Verification required for log
     TRACELOG(LOG_INFO, "SYSTEM: [%s] Screenshot taken successfully", path);
+}
+
+// Returns a random value between min and max (both included)
+int GetRandomValue(int min, int max)
+{
+    if (min > max)
+    {
+        int tmp = max;
+        max = min;
+        min = tmp;
+    }
+
+    return (rand()%(abs(max - min) + 1) + min);
 }
 
 // Check if the file exists
@@ -2075,7 +1976,7 @@ const char *GetDirectoryPath(const char *filePath)
     if (lastSlash)
     {
         // NOTE: Be careful, strncpy() is not safe, it does not care about '\0'
-        strncpy(dirPath + ((filePath[1] != ':')? 2 : 0), filePath, strlen(filePath) - (strlen(lastSlash) - 1));
+        memcpy(dirPath + ((filePath[1] != ':')? 2 : 0), filePath, strlen(filePath) - (strlen(lastSlash) - 1));
         dirPath[strlen(filePath) - strlen(lastSlash) + ((filePath[1] != ':')? 2 : 0)] = '\0';  // Add '\0' manually
     }
 
@@ -2091,11 +1992,13 @@ const char *GetPrevDirectoryPath(const char *dirPath)
 
     if (pathLen <= 3) strcpy(prevDirPath, dirPath);
 
-    for (int i = (pathLen - 1); (i > 0) && (pathLen > 3); i--)
+    for (int i = (pathLen - 1); (i >= 0) && (pathLen > 3); i--)
     {
         if ((dirPath[i] == '\\') || (dirPath[i] == '/'))
         {
-            if (i == 2) i++;    // Check for root: "C:\"
+            // Check for root: "C:\" or "/"
+            if (((i == 2) && (dirPath[1] ==':')) || (i == 0)) i++;
+            
             strncpy(prevDirPath, dirPath, i);
             break;
         }
@@ -2981,7 +2884,7 @@ static bool InitGraphicsDevice(int width, int height)
         // HighDPI monitors are properly considered in a following similar function: SetupViewport()
         SetupFramebuffer(CORE.Window.display.width, CORE.Window.display.height);
 
-        CORE.Window.handle = glfwCreateWindow(CORE.Window.display.width, CORE.Window.display.height, CORE.Window.title, glfwGetPrimaryMonitor(), NULL);
+        CORE.Window.handle = glfwCreateWindow(CORE.Window.display.width, CORE.Window.display.height, (CORE.Window.title != 0)? CORE.Window.title : " ", glfwGetPrimaryMonitor(), NULL);
 
         // NOTE: Full-screen change, not working properly...
         //glfwSetWindowMonitor(CORE.Window.handle, glfwGetPrimaryMonitor(), 0, 0, CORE.Window.screen.width, CORE.Window.screen.height, GLFW_DONT_CARE);
@@ -2989,7 +2892,7 @@ static bool InitGraphicsDevice(int width, int height)
     else
     {
         // No-fullscreen window creation
-        CORE.Window.handle = glfwCreateWindow(CORE.Window.screen.width, CORE.Window.screen.height, CORE.Window.title, NULL, NULL);
+        CORE.Window.handle = glfwCreateWindow(CORE.Window.screen.width, CORE.Window.screen.height, (CORE.Window.title != 0)? CORE.Window.title : " ", NULL, NULL);
 
         if (CORE.Window.handle)
         {
@@ -3266,6 +3169,10 @@ static bool InitGraphicsDevice(int width, int height)
     // Get display size
     UWPGetDisplaySizeFunc()(&CORE.Window.display.width, &CORE.Window.display.height);
 
+    // Use the width and height of the surface for render
+    CORE.Window.render.width = CORE.Window.screen.width;
+    CORE.Window.render.height = CORE.Window.screen.height;
+
 #endif  // PLATFORM_UWP
 
 #if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI)
@@ -3312,7 +3219,10 @@ static bool InitGraphicsDevice(int width, int height)
     eglGetConfigAttrib(CORE.Window.device, CORE.Window.config, EGL_NATIVE_VISUAL_ID, &displayFormat);
 
     // At this point we need to manage render size vs screen size
-    // NOTE: This function use and modify global module variables: CORE.Window.screen.width/CORE.Window.screen.height and CORE.Window.render.width/CORE.Window.render.height and CORE.Window.screenScale
+    // NOTE: This function use and modify global module variables: 
+    //  -> CORE.Window.screen.width/CORE.Window.screen.height
+    //  -> CORE.Window.render.width/CORE.Window.render.height
+    //  -> CORE.Window.screenScale
     SetupFramebuffer(CORE.Window.display.width, CORE.Window.display.height);
 
     ANativeWindow_setBuffersGeometry(CORE.Android.app->window, CORE.Window.render.width, CORE.Window.render.height, displayFormat);
@@ -3329,7 +3239,10 @@ static bool InitGraphicsDevice(int width, int height)
     if (CORE.Window.screen.height <= 0) CORE.Window.screen.height = CORE.Window.display.height;
 
     // At this point we need to manage render size vs screen size
-    // NOTE: This function use and modify global module variables: CORE.Window.screen.width/CORE.Window.screen.height and CORE.Window.render.width/CORE.Window.render.height and CORE.Window.screenScale
+    // NOTE: This function use and modify global module variables: 
+    //  -> CORE.Window.screen.width/CORE.Window.screen.height
+    //  -> CORE.Window.render.width/CORE.Window.render.height
+    //  -> CORE.Window.screenScale    
     SetupFramebuffer(CORE.Window.display.width, CORE.Window.display.height);
 
     dstRect.x = 0;
@@ -3376,22 +3289,13 @@ static bool InitGraphicsDevice(int width, int height)
     }
     else
     {
-        // Grab the width and height of the surface
-#if defined(PLATFORM_UWP)
-        CORE.Window.render.width = CORE.Window.screen.width;
-        CORE.Window.render.height = CORE.Window.screen.height;
-#else
-        CORE.Window.render.width = CORE.Window.display.width;
-        CORE.Window.render.height = CORE.Window.display.height;
-#endif
-
         TRACELOG(LOG_INFO, "DISPLAY: Device initialized successfully");
         TRACELOG(LOG_INFO, "    > Display size: %i x %i", CORE.Window.display.width, CORE.Window.display.height);
         TRACELOG(LOG_INFO, "    > Render size:  %i x %i", CORE.Window.render.width, CORE.Window.render.height);
         TRACELOG(LOG_INFO, "    > Screen size:  %i x %i", CORE.Window.screen.width, CORE.Window.screen.height);
         TRACELOG(LOG_INFO, "    > Viewport offsets: %i, %i", CORE.Window.renderOffset.x, CORE.Window.renderOffset.y);
     }
-#endif // PLATFORM_ANDROID || PLATFORM_RPI
+#endif // PLATFORM_ANDROID || PLATFORM_RPI || defined(PLATFORM_UWP)
 
     // Initialize OpenGL context (states and resources)
     // NOTE: CORE.Window.screen.width and CORE.Window.screen.height not used, just stored as globals in rlgl
@@ -4340,7 +4244,7 @@ static EM_BOOL EmscriptenFullscreenChangeCallback(int eventType, const Emscripte
     //fs element id: (char *) event->id
     //Current element size: (int) event->elementWidth, (int) event->elementHeight
     //Screen size:(int) event->screenWidth, (int) event->screenHeight
-
+/*
     if (event->isFullscreen)
     {
         CORE.Window.fullscreen = true;
@@ -4353,16 +4257,20 @@ static EM_BOOL EmscriptenFullscreenChangeCallback(int eventType, const Emscripte
     }
 
     // TODO: Depending on scaling factor (screen vs element), calculate factor to scale mouse/touch input
-
+*/
     return 0;
 }
 
 // Register keyboard input events
 static EM_BOOL EmscriptenKeyboardCallback(int eventType, const EmscriptenKeyboardEvent *keyEvent, void *userData)
 {
-    if ((eventType == EMSCRIPTEN_EVENT_KEYPRESS) && (keyEvent->keyCode == 27))  // ESCAPE key
+    if ((eventType == EMSCRIPTEN_EVENT_KEYDOWN) && (keyEvent->keyCode == 27))  // ESCAPE key (strcmp(keyEvent->code, "Escape") == 0)
     {
+        // WARNING: Not executed when pressing Esc to exit fullscreen, it seems document has priority over #canvas
+        
         emscripten_exit_pointerlock();
+        CORE.Window.fullscreen = false;
+        TRACELOG(LOG_INFO, "CORE.Window.fullscreen = %s", CORE.Window.fullscreen? "true" : "false");
     }
 
     return 0;
@@ -4372,20 +4280,19 @@ static EM_BOOL EmscriptenKeyboardCallback(int eventType, const EmscriptenKeyboar
 static EM_BOOL EmscriptenMouseCallback(int eventType, const EmscriptenMouseEvent *mouseEvent, void *userData)
 {
     // Lock mouse pointer when click on screen
-    if ((eventType == EMSCRIPTEN_EVENT_CLICK) && CORE.Input.Mouse.cursorLockRequired)
+    if (eventType == EMSCRIPTEN_EVENT_CLICK)
     {
         EmscriptenPointerlockChangeEvent plce;
         emscripten_get_pointerlock_status(&plce);
 
-        if (!plce.isActive) emscripten_request_pointerlock(0, 1);
-        else
-        {
-            emscripten_exit_pointerlock();
-            emscripten_get_pointerlock_status(&plce);
-            //if (plce.isActive) TRACELOG(LOG_WARNING, "Pointer lock exit did not work!");
-        }
+        int result = emscripten_request_pointerlock("#canvas", 1);   // TODO: It does not work!
 
-        CORE.Input.Mouse.cursorLockRequired = false;
+        // result -> EMSCRIPTEN_RESULT_DEFERRED
+        // The requested operation cannot be completed now for web security reasons,
+        // and has been deferred for completion in the next event handler. --> but it never happens!
+
+        //if (!plce.isActive) emscripten_request_pointerlock(0, 1);
+        //else emscripten_exit_pointerlock();
     }
 
     return 0;
@@ -4475,6 +4382,16 @@ static EM_BOOL EmscriptenGamepadCallback(int eventType, const EmscriptenGamepadE
     // TODO: Test gamepadEvent->index
 
     return 0;
+}
+
+static EM_BOOL EmscriptenWindowResizedCallback(int eventType, const void *reserved, void *userData)
+{
+    double width, height;
+    emscripten_get_element_css_size("canvas", &width, &height);
+
+    // TODO.
+
+    return true;
 }
 #endif
 
@@ -4635,7 +4552,7 @@ static void ProcessKeyboard(void)
     // Check screen capture key (raylib key: KEY_F12)
     if (CORE.Input.Keyboard.currentKeyState[301] == 1)
     {
-        TakeScreenshot(FormatText("screenshot%03i.png", screenshotCounter));
+        TakeScreenshot(TextFormat("screenshot%03i.png", screenshotCounter));
         screenshotCounter++;
     }
 #endif
@@ -4695,7 +4612,7 @@ static void InitEvdevInput(void)
 // Identifies a input device and spawns a thread to handle it if needed
 static void EventThreadSpawn(char *device)
 {
-    #define BITS_PER_LONG   (sizeof(long)*8)
+    #define BITS_PER_LONG   (8*sizeof(long))
     #define NBITS(x)        ((((x) - 1)/BITS_PER_LONG) + 1)
     #define OFF(x)          ((x)%BITS_PER_LONG)
     #define BIT(x)          (1UL<<OFF(x))
@@ -5039,7 +4956,7 @@ static void *EventThread(void *arg)
                             // Check screen capture key (raylib key: KEY_F12)
                             if (CORE.Input.Keyboard.currentKeyState[301] == 1)
                             {
-                                TakeScreenshot(FormatText("screenshot%03i.png", screenshotCounter));
+                                TakeScreenshot(TextFormat("screenshot%03i.png", screenshotCounter));
                                 screenshotCounter++;
                             }
                         #endif

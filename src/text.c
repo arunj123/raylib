@@ -54,12 +54,12 @@
 #endif
 
 #include <stdlib.h>         // Required for: malloc(), free()
-#include <stdio.h>          // Required for: FILE, fopen(), fclose(), fgets()
-#include <string.h>         // Required for: strcmp(), strstr(), strcpy(), strncpy(), strcat(), strncat(), sscanf()
+#include <stdio.h>          // Required for: vsprintf()
+#include <string.h>         // Required for: strcmp(), strstr(), strcpy(), strncpy() [Used in TextReplace()], sscanf() [Used in LoadBMFont()]
 #include <stdarg.h>         // Required for: va_list, va_start(), vsprintf(), va_end() [Used in TextFormat()]
 #include <ctype.h>          // Requried for: toupper(), tolower() [Used in TextToUpper(), TextToLower()]
 
-#include "utils.h"          // Required for: fopen() Android mapping
+#include "utils.h"          // Required for: LoadFileText()
 
 #if defined(SUPPORT_FILEFORMAT_TTF)
     #define STB_RECT_PACK_IMPLEMENTATION
@@ -191,32 +191,30 @@ extern void LoadFontDefault(void)
 
     // Re-construct image from defaultFontData and generate OpenGL texture
     //----------------------------------------------------------------------
-    int imWidth = 128;
-    int imHeight = 128;
+    Image imFont = {
+        .data = calloc(128*128, 2),  // 2 bytes per pixel (gray + alpha)
+        .width = 128, 
+        .height = 128,
+        .format = UNCOMPRESSED_GRAY_ALPHA,
+        .mipmaps = 1
+    };
 
-    Color *imagePixels = (Color *)RL_MALLOC(imWidth*imHeight*sizeof(Color));
-
-    for (int i = 0; i < imWidth*imHeight; i++) imagePixels[i] = BLANK;        // Initialize array
-
-    int counter = 0;        // Font data elements counter
-
-    // Fill imgData with defaultFontData (convert from bit to pixel!)
-    for (int i = 0; i < imWidth*imHeight; i += 32)
+    // Fill image.data with defaultFontData (convert from bit to pixel!)
+    for (int i = 0, counter = 0; i < imFont.width*imFont.height; i += 32)
     {
         for (int j = 31; j >= 0; j--)
         {
-            if (BIT_CHECK(defaultFontData[counter], j)) imagePixels[i+j] = WHITE;
+            if (BIT_CHECK(defaultFontData[counter], j))
+            {
+                // NOTE: We are unreferencing data as short, so,
+                // we must consider data as little-endian order (alpha + gray)
+                ((unsigned short *)imFont.data)[i + j] = 0xffff;
+            }
+            else ((unsigned short *)imFont.data)[i + j] = 0x00ff;
         }
 
         counter++;
-
-        if (counter > 512) counter = 0;         // Security check...
     }
-
-    Image imFont = LoadImageEx(imagePixels, imWidth, imHeight);
-    ImageFormat(&imFont, UNCOMPRESSED_GRAY_ALPHA);
-
-    RL_FREE(imagePixels);
 
     defaultFont.texture = LoadTextureFromImage(imFont);
 
@@ -445,9 +443,13 @@ Font LoadFontFromImage(Image image, Color key, int firstChar)
     for (int i = 0; i < image.height*image.width; i++) if (COLOR_EQUAL(pixels[i], key)) pixels[i] = BLANK;
 
     // Create a new image with the processed color data (key color replaced by BLANK)
-    Image fontClear = LoadImageEx(pixels, image.width, image.height);
-
-    RL_FREE(pixels);    // Free pixels array memory
+    Image fontClear = {
+        .data = pixels,
+        .width = image.width,
+        .height = image.height,
+        .format = UNCOMPRESSED_R8G8B8A8,
+        .mipmaps = 1
+    };
 
     // Create spritefont with all data parsed from image
     Font font = { 0 };
@@ -571,8 +573,15 @@ CharInfo *LoadFontData(const char *fileName, int fontSize, int *fontChars, int c
                 // NOTE: We create an empty image for space character, it could be further required for atlas packing
                 if (ch == 32)
                 {
-                    chars[i].image = GenImageColor(chars[i].advanceX, fontSize, BLANK);
-                    ImageFormat(&chars[i].image, UNCOMPRESSED_GRAYSCALE);
+                    Image imSpace = {
+                        .data = calloc(chars[i].advanceX*fontSize, 2),
+                        .width = chars[i].advanceX,
+                        .height = fontSize,
+                        .format = UNCOMPRESSED_GRAYSCALE,
+                        .mipmaps = 1
+                    };
+                    
+                    chars[i].image = imSpace;
                 }
 
                 if (type == FONT_BITMAP)
@@ -612,6 +621,12 @@ CharInfo *LoadFontData(const char *fileName, int fontSize, int *fontChars, int c
 Image GenImageFontAtlas(const CharInfo *chars, Rectangle **charRecs, int charsCount, int fontSize, int padding, int packMethod)
 {
     Image atlas = { 0 };
+
+    if (chars == NULL)
+    {
+        TraceLog(LOG_WARNING, "FONT: Provided chars info not valid, returning empty image atlas");
+        return atlas;
+    }
 
     *charRecs = NULL;
 
@@ -727,7 +742,6 @@ Image GenImageFontAtlas(const CharInfo *chars, Rectangle **charRecs, int charsCo
     // TODO: Crop image if required for smaller size
 
     // Convert image data from GRAYSCALE to GRAY_ALPHA
-    // WARNING: ImageAlphaMask(&atlas, atlas) does not work in this case, requires manual operation
     unsigned char *dataGrayAlpha = (unsigned char *)RL_MALLOC(atlas.width*atlas.height*sizeof(unsigned char)*2); // Two channels
 
     for (int i = 0, k = 0; i < atlas.width*atlas.height; i++, k += 2)
@@ -1132,6 +1146,24 @@ const char *TextFormat(const char *text, ...)
     return currentBuffer;
 }
 
+// Get integer value from text
+// NOTE: This function replaces atoi() [stdlib.h]
+int TextToInteger(const char *text)
+{
+    int value = 0;
+    int sign = 1;
+
+    if ((text[0] == '+') || (text[0] == '-'))
+    {
+        if (text[0] == '-') sign = -1;
+        text++;
+    }
+
+    for (int i = 0; ((text[i] >= '0') && (text[i] <= '9')); ++i) value = value*10 + (int)(text[i] - '0');
+
+    return value*sign;
+}
+
 #if defined(SUPPORT_TEXT_MANIPULATION)
 // Copy one string to another, returns bytes copied
 int TextCopy(char *dst, const char *src)
@@ -1261,29 +1293,32 @@ char *TextInsert(const char *text, const char *insert, int position)
 }
 
 // Join text strings with delimiter
-// REQUIRES: strcat()
+// REQUIRES: memset(), memcpy()
 const char *TextJoin(const char **textList, int count, const char *delimiter)
 {
     static char text[MAX_TEXT_BUFFER_LENGTH] = { 0 };
     memset(text, 0, MAX_TEXT_BUFFER_LENGTH);
+    char *textPtr = text;
 
     int totalLength = 0;
     int delimiterLen = TextLength(delimiter);
 
     for (int i = 0; i < count; i++)
     {
-        int textListLength = TextLength(textList[i]);
+        int textLength = TextLength(textList[i]);
 
         // Make sure joined text could fit inside MAX_TEXT_BUFFER_LENGTH
-        if ((totalLength + textListLength) < MAX_TEXT_BUFFER_LENGTH)
+        if ((totalLength + textLength) < MAX_TEXT_BUFFER_LENGTH)
         {
-            strcat(text, textList[i]);
-            totalLength += textListLength;
+            memcpy(textPtr, textList[i], textLength);
+            totalLength += textLength;
+            textPtr += textLength;
 
             if ((delimiterLen > 0) && (i < (count - 1)))
             {
-                strcat(text, delimiter);
+                memcpy(textPtr, delimiter, delimiterLen);
                 totalLength += delimiterLen;
+                textPtr += delimiterLen;
             }
         }
     }
@@ -1415,24 +1450,6 @@ const char *TextToPascal(const char *text)
     return buffer;
 }
 
-// Get integer value from text
-// NOTE: This function replaces atoi() [stdlib.h]
-int TextToInteger(const char *text)
-{
-    int value = 0;
-    int sign = 1;
-
-    if ((text[0] == '+') || (text[0] == '-'))
-    {
-        if (text[0] == '-') sign = -1;
-        text++;
-    }
-
-    for (int i = 0; ((text[i] >= '0') && (text[i] <= '9')); ++i) value = value*10 + (int)(text[i] - '0');
-
-    return value*sign;
-}
-
 // Encode text codepoint into utf8 text (memory must be freed!)
 char *TextToUtf8(int *codepoints, int length)
 {
@@ -1445,7 +1462,7 @@ char *TextToUtf8(int *codepoints, int length)
     for (int i = 0, bytes = 0; i < length; i++)
     {
         utf8 = CodepointToUtf8(codepoints[i], &bytes);
-        strncpy(text + size, utf8, bytes);
+        memcpy(text + size, utf8, bytes);
         size += bytes;
     }
 
@@ -1654,7 +1671,19 @@ int GetNextCodepoint(const char *text, int *bytesProcessed)
 // Module specific Functions Definition
 //----------------------------------------------------------------------------------
 #if defined(SUPPORT_FILEFORMAT_FNT)
+
+// Read a line from memory
+// NOTE: Returns the number of bytes read
+static int GetLine(const char *origin, char *buffer, int maxLength)
+{
+    int count = 0;
+    for (; count < maxLength; count++) if (origin[count] == '\n') break;
+    memcpy(buffer, origin, count);
+    return count;
+}
+
 // Load a BMFont file (AngelCode font file)
+// REQUIRES: strstr(), sscanf(), strrchr(), memcpy()
 static Font LoadBMFont(const char *fileName)
 {
     #define MAX_BUFFER_SIZE     256
@@ -1665,76 +1694,79 @@ static Font LoadBMFont(const char *fileName)
     char *searchPoint = NULL;
 
     int fontSize = 0;
-    int texWidth = 0;
-    int texHeight = 0;
-    char texFileName[129];
     int charsCount = 0;
+    
+    int imWidth = 0;
+    int imHeight = 0;
+    char imFileName[129];
 
     int base = 0;   // Useless data
 
-    FILE *fntFile = NULL;
+    char *fileText = LoadFileText(fileName);
 
-    fntFile = fopen(fileName, "rt");
+    if (fileText == NULL) return font;
 
-    if (fntFile == NULL)
-    {
-        TRACELOG(LOG_WARNING, "FILEIO: [%s] Failed to open FNT file", fileName);
-        return font;
-    }
-
+    char *fileTextPtr = fileText;
+    
     // NOTE: We skip first line, it contains no useful information
-    fgets(buffer, MAX_BUFFER_SIZE, fntFile);
-    //searchPoint = strstr(buffer, "size");
-    //sscanf(searchPoint, "size=%i", &fontSize);
+    int lineBytes = GetLine(fileTextPtr, buffer, MAX_BUFFER_SIZE);
+    fileTextPtr += (lineBytes + 1);
 
-    fgets(buffer, MAX_BUFFER_SIZE, fntFile);
+    // Read line data
+    lineBytes = GetLine(fileTextPtr, buffer, MAX_BUFFER_SIZE);
     searchPoint = strstr(buffer, "lineHeight");
-    sscanf(searchPoint, "lineHeight=%i base=%i scaleW=%i scaleH=%i", &fontSize, &base, &texWidth, &texHeight);
+    sscanf(searchPoint, "lineHeight=%i base=%i scaleW=%i scaleH=%i", &fontSize, &base, &imWidth, &imHeight);
+    fileTextPtr += (lineBytes + 1);
 
     TRACELOGD("FONT: [%s] Loaded font info:", fileName);
-    TRACELOGD("    > Base size:     %i", fontSize);
-    TRACELOGD("    > Texture scale: %ix%i", texWidth, texHeight);
+    TRACELOGD("    > Base size: %i", fontSize);
+    TRACELOGD("    > Texture scale: %ix%i", imWidth, imHeight);
 
-    fgets(buffer, MAX_BUFFER_SIZE, fntFile);
+    lineBytes = GetLine(fileTextPtr, buffer, MAX_BUFFER_SIZE);
     searchPoint = strstr(buffer, "file");
-    sscanf(searchPoint, "file=\"%128[^\"]\"", texFileName);
+    sscanf(searchPoint, "file=\"%128[^\"]\"", imFileName);
+    fileTextPtr += (lineBytes + 1);
 
-    TRACELOGD("    > Texture filename: %s", texFileName);
+    TRACELOGD("    > Texture filename: %s", imFileName);
 
-    fgets(buffer, MAX_BUFFER_SIZE, fntFile);
+    lineBytes = GetLine(fileTextPtr, buffer, MAX_BUFFER_SIZE);
     searchPoint = strstr(buffer, "count");
     sscanf(searchPoint, "count=%i", &charsCount);
+    fileTextPtr += (lineBytes + 1);
 
     TRACELOGD("    > Chars count: %i", charsCount);
 
-    // Compose correct path using route of .fnt file (fileName) and texFileName
-    char *texPath = NULL;
+    // Compose correct path using route of .fnt file (fileName) and imFileName
+    char *imPath = NULL;
     char *lastSlash = NULL;
 
     lastSlash = strrchr(fileName, '/');
-    if (lastSlash == NULL)
+    if (lastSlash == NULL) lastSlash = strrchr(fileName, '\\');
+
+    if (lastSlash != NULL)
     {
-        lastSlash = strrchr(fileName, '\\');
+        // NOTE: We need some extra space to avoid memory corruption on next allocations!
+        imPath = RL_CALLOC(TextLength(fileName) - TextLength(lastSlash) + TextLength(imFileName) + 4, 1);
+        memcpy(imPath, fileName, TextLength(fileName) - TextLength(lastSlash) + 1);
+        memcpy(imPath + TextLength(fileName) - TextLength(lastSlash) + 1, imFileName, TextLength(imFileName));
     }
+    else imPath = imFileName;
 
-    // NOTE: We need some extra space to avoid memory corruption on next allocations!
-    texPath = RL_MALLOC(TextLength(fileName) - TextLength(lastSlash) + TextLength(texFileName) + 4);
+    TRACELOGD("    > Image loading path: %s", imPath);
 
-    // NOTE: strcat() and strncat() required a '\0' terminated string to work!
-    *texPath = '\0';
-    strncat(texPath, fileName, TextLength(fileName) - TextLength(lastSlash) + 1);
-    strncat(texPath, texFileName, TextLength(texFileName));
-
-    TRACELOGD("    > Texture loading path: %s", texPath);
-
-    Image imFont = LoadImage(texPath);
+    Image imFont = LoadImage(imPath);
 
     if (imFont.format == UNCOMPRESSED_GRAYSCALE)
     {
         // Convert image to GRAYSCALE + ALPHA, using the mask as the alpha channel
-        Image imFontAlpha = ImageCopy(imFont);
-        ImageFormat(&imFontAlpha, UNCOMPRESSED_GRAY_ALPHA);
-        
+        Image imFontAlpha = {
+            .data = calloc(imFont.width*imFont.height, 2),
+            .width = imFont.width,
+            .height = imFont.height,
+            .format = UNCOMPRESSED_GRAY_ALPHA,
+            .mipmaps = 1
+        };
+
         for (int p = 0, i = 0; p < (imFont.width*imFont.height*2); p += 2, i++)
         {
             ((unsigned char *)(imFontAlpha.data))[p] = 0xff;
@@ -1747,7 +1779,7 @@ static Font LoadBMFont(const char *fileName)
 
     font.texture = LoadTextureFromImage(imFont);
 
-    RL_FREE(texPath);
+    if (lastSlash != NULL) RL_FREE(imPath);
 
     // Fill font characters info data
     font.baseSize = fontSize;
@@ -1759,9 +1791,10 @@ static Font LoadBMFont(const char *fileName)
 
     for (int i = 0; i < charsCount; i++)
     {
-        fgets(buffer, MAX_BUFFER_SIZE, fntFile);
+        lineBytes = GetLine(fileTextPtr, buffer, MAX_BUFFER_SIZE);
         sscanf(buffer, "char id=%i x=%i y=%i width=%i height=%i xoffset=%i yoffset=%i xadvance=%i",
                        &charId, &charX, &charY, &charWidth, &charHeight, &charOffsetX, &charOffsetY, &charAdvanceX);
+        fileTextPtr += (lineBytes + 1);
 
         // Get character rectangle in the font atlas texture
         font.recs[i] = (Rectangle){ (float)charX, (float)charY, (float)charWidth, (float)charHeight };
@@ -1777,8 +1810,7 @@ static Font LoadBMFont(const char *fileName)
     }
 
     UnloadImage(imFont);
-
-    fclose(fntFile);
+    RL_FREE(fileText);
 
     if (font.texture.id == 0)
     {

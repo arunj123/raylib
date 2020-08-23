@@ -19,8 +19,9 @@ Here it is a list with the ones I'm aware of:
 | raylib-lua         | Lua            | https://github.com/raysan5/raylib-lua                                |
 | raylib-lua-ffi     | Lua            | https://github.com/raysan5/raylib/issues/693                         |
 | raylib-lua-sol     | Lua            | https://github.com/RobLoach/raylib-lua-sol                           |
-| raylib-lua (raylua)| Lua            | https://github.com/TSnake41/raylib-lua                               |
+| raylib-lua         | Lua            | https://github.com/TSnake41/raylib-lua                               |
 | raylib-luamore     | Lua            | https://github.com/HDPLocust/raylib-luamore                          |
+| raylua             | Lua            | https://github.com/Rabios/raylua                             |
 | raylib-nelua       | [Nelua](https://nelua.io/)      | https://github.com/Andre-LA/raylib-nelua-mirror     |
 | raylib-Nim         | Nim            | https://gitlab.com/define-private-public/raylib-Nim                  |
 | raylib-nim         | Nim            | https://github.com/Skrylar/raylib-nim                                |
@@ -59,6 +60,7 @@ Here it is a list with the ones I'm aware of:
 | raylib-wren        | [Wren](http://wren.io/)           | https://github.com/TSnake41/raylib-wren           |
 | raylib-odin        | [Odin](https://odin-lang.org/)            | https://github.com/kevinw/raylib-odin     |
 | raylib-zig         | [Zig](https://ziglang.org/)               | https://github.com/Not-Nik/raylib-zig     |
+| raylib-jai         | [Jai](https://github.com/BSVino/JaiPrimer/blob/master/JaiPrimer.md)  | https://github.com/kevinw/raylib-jai   |
 | ray.zig            | [Zig](https://ziglang.org/)               | https://github.com/BitPuffin/zig-raylib-experiments |
 | raylib-Ada         | [Ada](https://www.adacore.com/about-ada)  | https://github.com/mimo/raylib-Ada        |
 | jaylib             | [Janet](https://janet-lang.org/)          | https://github.com/janet-lang/jaylib      |

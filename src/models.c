@@ -43,11 +43,11 @@
     #include "config.h"         // Defines module configuration flags
 #endif
 
-#include "utils.h"          // Required for: fopen() Android mapping
+#include "utils.h"          // Required for: LoadFileData(), LoadFileText(), SaveFileText()
 
+#include <stdio.h>          // Required for: sprintf()
 #include <stdlib.h>         // Required for: malloc(), free()
-#include <stdio.h>          // Required for: FILE, fopen(), fclose()
-#include <string.h>         // Required for: strncmp() [Used in LoadModelAnimations()], strlen() [Used in LoadTextureFromCgltfImage()]
+#include <string.h>         // Required for: memcmp(), strlen()
 #include <math.h>           // Required for: sinf(), cosf(), sqrtf(), fabsf()
 
 #if defined(_WIN32)
@@ -825,57 +825,64 @@ void UnloadMesh(Mesh mesh)
 // Export mesh data to file
 void ExportMesh(Mesh mesh, const char *fileName)
 {
-    bool success = false;
-
     if (IsFileExtension(fileName, ".obj"))
     {
-        FILE *objFile = fopen(fileName, "wt");
+        // Estimated data size, it should be enough...
+        int dataSize = mesh.vertexCount/3*strlen("v 0000.00f 0000.00f 0000.00f") + 
+                       mesh.vertexCount/2*strlen("vt 0.000f 0.00f") + 
+                       mesh.vertexCount/3*strlen("vn 0.000f 0.00f 0.00f") + 
+                       mesh.triangleCount/3*strlen("f 00000/00000/00000 00000/00000/00000 00000/00000/00000");
 
-        fprintf(objFile, "# //////////////////////////////////////////////////////////////////////////////////\n");
-        fprintf(objFile, "# //                                                                              //\n");
-        fprintf(objFile, "# // rMeshOBJ exporter v1.0 - Mesh exported as triangle faces and not optimized   //\n");
-        fprintf(objFile, "# //                                                                              //\n");
-        fprintf(objFile, "# // more info and bugs-report:  github.com/raysan5/raylib                        //\n");
-        fprintf(objFile, "# // feedback and support:       ray[at]raylib.com                                //\n");
-        fprintf(objFile, "# //                                                                              //\n");
-        fprintf(objFile, "# // Copyright (c) 2018 Ramon Santamaria (@raysan5)                               //\n");
-        fprintf(objFile, "# //                                                                              //\n");
-        fprintf(objFile, "# //////////////////////////////////////////////////////////////////////////////////\n\n");
-        fprintf(objFile, "# Vertex Count:     %i\n", mesh.vertexCount);
-        fprintf(objFile, "# Triangle Count:   %i\n\n", mesh.triangleCount);
+        // NOTE: Text data buffer size is estimated considering mesh data size
+        char *txtData = (char *)RL_CALLOC(dataSize + 2000, sizeof(char));
 
-        fprintf(objFile, "g mesh\n");
+        int bytesCount = 0;
+        bytesCount += sprintf(txtData + bytesCount, "# //////////////////////////////////////////////////////////////////////////////////\n");
+        bytesCount += sprintf(txtData + bytesCount, "# //                                                                              //\n");
+        bytesCount += sprintf(txtData + bytesCount, "# // rMeshOBJ exporter v1.0 - Mesh exported as triangle faces and not optimized   //\n");
+        bytesCount += sprintf(txtData + bytesCount, "# //                                                                              //\n");
+        bytesCount += sprintf(txtData + bytesCount, "# // more info and bugs-report:  github.com/raysan5/raylib                        //\n");
+        bytesCount += sprintf(txtData + bytesCount, "# // feedback and support:       ray[at]raylib.com                                //\n");
+        bytesCount += sprintf(txtData + bytesCount, "# //                                                                              //\n");
+        bytesCount += sprintf(txtData + bytesCount, "# // Copyright (c) 2018 Ramon Santamaria (@raysan5)                               //\n");
+        bytesCount += sprintf(txtData + bytesCount, "# //                                                                              //\n");
+        bytesCount += sprintf(txtData + bytesCount, "# //////////////////////////////////////////////////////////////////////////////////\n\n");
+        bytesCount += sprintf(txtData + bytesCount, "# Vertex Count:     %i\n", mesh.vertexCount);
+        bytesCount += sprintf(txtData + bytesCount, "# Triangle Count:   %i\n\n", mesh.triangleCount);
+
+        bytesCount += sprintf(txtData + bytesCount, "g mesh\n");
 
         for (int i = 0, v = 0; i < mesh.vertexCount; i++, v += 3)
         {
-            fprintf(objFile, "v %.2f %.2f %.2f\n", mesh.vertices[v], mesh.vertices[v + 1], mesh.vertices[v + 2]);
+            bytesCount += sprintf(txtData + bytesCount, "v %.2f %.2f %.2f\n", mesh.vertices[v], mesh.vertices[v + 1], mesh.vertices[v + 2]);
         }
 
         for (int i = 0, v = 0; i < mesh.vertexCount; i++, v += 2)
         {
-            fprintf(objFile, "vt %.2f %.2f\n", mesh.texcoords[v], mesh.texcoords[v + 1]);
+            bytesCount += sprintf(txtData + bytesCount, "vt %.3f %.3f\n", mesh.texcoords[v], mesh.texcoords[v + 1]);
         }
 
         for (int i = 0, v = 0; i < mesh.vertexCount; i++, v += 3)
         {
-            fprintf(objFile, "vn %.2f %.2f %.2f\n", mesh.normals[v], mesh.normals[v + 1], mesh.normals[v + 2]);
+            bytesCount += sprintf(txtData + bytesCount, "vn %.3f %.3f %.3f\n", mesh.normals[v], mesh.normals[v + 1], mesh.normals[v + 2]);
         }
 
         for (int i = 0; i < mesh.triangleCount; i += 3)
         {
-            fprintf(objFile, "f %i/%i/%i %i/%i/%i %i/%i/%i\n", i, i, i, i + 1, i + 1, i + 1, i + 2, i + 2, i + 2);
+            bytesCount += sprintf(txtData + bytesCount, "f %i/%i/%i %i/%i/%i %i/%i/%i\n", i, i, i, i + 1, i + 1, i + 1, i + 2, i + 2, i + 2);
         }
 
-        fprintf(objFile, "\n");
+        bytesCount += sprintf(txtData + bytesCount, "\n");
 
-        fclose(objFile);
+        // NOTE: Text data length exported is determined by '\0' (NULL) character
+        SaveFileText(fileName, txtData);
 
-        success = true;
+        RL_FREE(txtData);
     }
-    else if (IsFileExtension(fileName, ".raw")) { }   // TODO: Support additional file formats to export mesh vertex data
-
-    if (success) TRACELOG(LOG_INFO, "FILEIO: [%s] Mesh exported successfully", fileName);
-    else TRACELOG(LOG_WARNING, "FILEIO: [%s] Failed to export mesh data", fileName);
+    else if (IsFileExtension(fileName, ".raw")) 
+    {
+        // TODO: Support additional file formats to export mesh vertex data
+    }
 }
 
 // Load materials from model file
@@ -959,10 +966,14 @@ void SetModelMeshMaterial(Model *model, int meshId, int materialId)
 }
 
 // Load model animations from file
-ModelAnimation *LoadModelAnimations(const char *filename, int *animCount)
+ModelAnimation *LoadModelAnimations(const char *fileName, int *animCount)
 {
     #define IQM_MAGIC       "INTERQUAKEMODEL"   // IQM file magic number
     #define IQM_VERSION     2                   // only IQM version 2 supported
+    
+    unsigned int fileSize = 0;
+    unsigned char *fileData = LoadFileData(fileName, &fileSize);
+    unsigned char *fileDataPtr = fileData;
 
     typedef struct IQMHeader {
         char magic[16];
@@ -995,72 +1006,66 @@ ModelAnimation *LoadModelAnimations(const char *filename, int *animCount)
         unsigned int flags;
     } IQMAnim;
 
-    FILE *iqmFile = NULL;
-    IQMHeader iqm;
-
-    iqmFile = fopen(filename,"rb");
-
-    if (!iqmFile)
-    {
-        TRACELOG(LOG_WARNING, "FILEIO: [%s] Failed to open file", filename);
-        return NULL;
-    }
+    // In case file can not be read, return an empty model
+    if (fileDataPtr == NULL) return NULL;
 
     // Read IQM header
-    fread(&iqm, sizeof(IQMHeader), 1, iqmFile);
+    IQMHeader *iqmHeader = (IQMHeader *)fileDataPtr;
 
-    if (strncmp(iqm.magic, IQM_MAGIC, sizeof(IQM_MAGIC)))
+    if (memcmp(iqmHeader->magic, IQM_MAGIC, sizeof(IQM_MAGIC)) != 0)
     {
-        TRACELOG(LOG_WARNING, "MODEL: [%s] IQM file is not a valid model", filename);
-        fclose(iqmFile);
+        TRACELOG(LOG_WARNING, "MODEL: [%s] IQM file is not a valid model", fileName);
         return NULL;
     }
 
-    if (iqm.version != IQM_VERSION)
+    if (iqmHeader->version != IQM_VERSION)
     {
-        TRACELOG(LOG_WARNING, "MODEL: [%s] IQM file version incorrect", filename);
-        fclose(iqmFile);
+        TRACELOG(LOG_WARNING, "MODEL: [%s] IQM file version not supported (%i)", fileName, iqmHeader->version);
         return NULL;
     }
 
     // Get bones data
-    IQMPose *poses = RL_MALLOC(iqm.num_poses*sizeof(IQMPose));
-    fseek(iqmFile, iqm.ofs_poses, SEEK_SET);
-    fread(poses, iqm.num_poses*sizeof(IQMPose), 1, iqmFile);
+    IQMPose *poses = RL_MALLOC(iqmHeader->num_poses*sizeof(IQMPose));
+    //fseek(iqmFile, iqmHeader->ofs_poses, SEEK_SET);
+    //fread(poses, iqmHeader->num_poses*sizeof(IQMPose), 1, iqmFile);
+    memcpy(poses, fileDataPtr + iqmHeader->ofs_poses, iqmHeader->num_poses*sizeof(IQMPose));
 
     // Get animations data
-    *animCount = iqm.num_anims;
-    IQMAnim *anim = RL_MALLOC(iqm.num_anims*sizeof(IQMAnim));
-    fseek(iqmFile, iqm.ofs_anims, SEEK_SET);
-    fread(anim, iqm.num_anims*sizeof(IQMAnim), 1, iqmFile);
-    ModelAnimation *animations = RL_MALLOC(iqm.num_anims*sizeof(ModelAnimation));
+    *animCount = iqmHeader->num_anims;
+    IQMAnim *anim = RL_MALLOC(iqmHeader->num_anims*sizeof(IQMAnim));
+    //fseek(iqmFile, iqmHeader->ofs_anims, SEEK_SET);
+    //fread(anim, iqmHeader->num_anims*sizeof(IQMAnim), 1, iqmFile);
+    memcpy(anim, fileDataPtr + iqmHeader->ofs_anims, iqmHeader->num_anims*sizeof(IQMAnim));
+    
+    ModelAnimation *animations = RL_MALLOC(iqmHeader->num_anims*sizeof(ModelAnimation));
 
     // frameposes
-    unsigned short *framedata = RL_MALLOC(iqm.num_frames*iqm.num_framechannels*sizeof(unsigned short));
-    fseek(iqmFile, iqm.ofs_frames, SEEK_SET);
-    fread(framedata, iqm.num_frames*iqm.num_framechannels*sizeof(unsigned short), 1, iqmFile);
+    unsigned short *framedata = RL_MALLOC(iqmHeader->num_frames*iqmHeader->num_framechannels*sizeof(unsigned short));
+    //fseek(iqmFile, iqmHeader->ofs_frames, SEEK_SET);
+    //fread(framedata, iqmHeader->num_frames*iqmHeader->num_framechannels*sizeof(unsigned short), 1, iqmFile);
+    memcpy(framedata, fileDataPtr + iqmHeader->ofs_frames, iqmHeader->num_frames*iqmHeader->num_framechannels*sizeof(unsigned short));
 
-    for (unsigned int a = 0; a < iqm.num_anims; a++)
+    for (unsigned int a = 0; a < iqmHeader->num_anims; a++)
     {
         animations[a].frameCount = anim[a].num_frames;
-        animations[a].boneCount = iqm.num_poses;
-        animations[a].bones = RL_MALLOC(iqm.num_poses*sizeof(BoneInfo));
+        animations[a].boneCount = iqmHeader->num_poses;
+        animations[a].bones = RL_MALLOC(iqmHeader->num_poses*sizeof(BoneInfo));
         animations[a].framePoses = RL_MALLOC(anim[a].num_frames*sizeof(Transform *));
         //animations[a].framerate = anim.framerate;     // TODO: Use framerate?
 
-        for (unsigned int j = 0; j < iqm.num_poses; j++)
+        for (unsigned int j = 0; j < iqmHeader->num_poses; j++)
         {
             strcpy(animations[a].bones[j].name, "ANIMJOINTNAME");
             animations[a].bones[j].parent = poses[j].parent;
         }
 
-        for (unsigned int j = 0; j < anim[a].num_frames; j++) animations[a].framePoses[j] = RL_MALLOC(iqm.num_poses*sizeof(Transform));
+        for (unsigned int j = 0; j < anim[a].num_frames; j++) animations[a].framePoses[j] = RL_MALLOC(iqmHeader->num_poses*sizeof(Transform));
 
-        int dcounter = anim[a].first_frame*iqm.num_framechannels;
+        int dcounter = anim[a].first_frame*iqmHeader->num_framechannels;
 
         for (unsigned int frame = 0; frame < anim[a].num_frames; frame++)
         {
-            for (unsigned int i = 0; i < iqm.num_poses; i++)
+            for (unsigned int i = 0; i < iqmHeader->num_poses; i++)
             {
                 animations[a].framePoses[frame][i].translation.x = poses[i].channeloffset[0];
 
@@ -1161,12 +1166,12 @@ ModelAnimation *LoadModelAnimations(const char *filename, int *animCount)
             }
         }
     }
+    
+    RL_FREE(fileData);
 
     RL_FREE(framedata);
     RL_FREE(poses);
     RL_FREE(anim);
-
-    fclose(iqmFile);
 
     return animations;
 }
@@ -1269,15 +1274,21 @@ Mesh GenMeshPoly(int sides, float radius)
 {
     Mesh mesh = { 0 };
     mesh.vboId = (unsigned int *)RL_CALLOC(DEFAULT_MESH_VERTEX_BUFFERS, sizeof(unsigned int));
+
+    if (sides < 3) return mesh;
+
     int vertexCount = sides*3;
 
     // Vertices definition
     Vector3 *vertices = (Vector3 *)RL_MALLOC(vertexCount*sizeof(Vector3));
-    for (int i = 0, v = 0; i < 360; i += 360/sides, v += 3)
+
+    float d = 0.0f, dStep = 360.0f/sides;
+    for (int v = 0; v < vertexCount; v += 3)
     {
         vertices[v] = (Vector3){ 0.0f, 0.0f, 0.0f };
-        vertices[v + 1] = (Vector3){ sinf(DEG2RAD*i)*radius, 0.0f, cosf(DEG2RAD*i)*radius };
-        vertices[v + 2] = (Vector3){ sinf(DEG2RAD*(i + 360/sides))*radius, 0.0f, cosf(DEG2RAD*(i + 360/sides))*radius };
+        vertices[v + 1] = (Vector3){ sinf(DEG2RAD*d)*radius, 0.0f, cosf(DEG2RAD*d)*radius };
+        vertices[v + 2] = (Vector3){sinf(DEG2RAD*(d+dStep)) * radius, 0.0f, cosf(DEG2RAD * (d+dStep)) * radius };
+        d += dStep;
     }
 
     // Normals definition
@@ -2462,6 +2473,74 @@ void MeshBinormals(Mesh *mesh)
     }
 }
 
+// Smooth (average) vertex normals
+void MeshNormalsSmooth(Mesh *mesh)
+{
+    #define EPSILON 0.000001 // A small number
+
+    int uvCounter = 0;
+    Vector3 *uniqueVertices = (Vector3 *)RL_CALLOC(mesh->vertexCount, sizeof(Vector3));
+    Vector3 *summedNormals = (Vector3 *)RL_CALLOC(mesh->vertexCount, sizeof(Vector3));
+
+    int uiCounter = 0;
+    int *uniqueIndices = (int *)RL_CALLOC(mesh->vertexCount, sizeof(int));
+
+    // Sum normals grouped by vertex
+    for (int i = 0; i < mesh->vertexCount; i++)
+    {
+        Vector3 v = { mesh->vertices[(i + 0)*3 + 0], mesh->vertices[(i + 0)*3 + 1], mesh->vertices[(i + 0)*3 + 2] };
+        Vector3 n = { mesh->normals[(i + 0)*3 + 0], mesh->normals[(i + 0)*3 + 1], mesh->normals[(i + 0)*3 + 2] };
+
+        bool matched = false;
+
+        // TODO: Matching vertices is brute force O(N^2). Do it more efficiently?
+        for (int j = 0; j < uvCounter; j++)
+        {
+            Vector3 uv = uniqueVertices[j];
+
+            bool match = true;
+            match = match && fabs(uv.x - v.x) < EPSILON;
+            match = match && fabs(uv.y - v.y) < EPSILON;
+            match = match && fabs(uv.z - v.z) < EPSILON;
+
+            if (match)
+            {
+                matched = true;
+                summedNormals[j] = Vector3Add(summedNormals[j], n);
+                uniqueIndices[i] = j;
+                break;
+            }
+        }
+
+        if (!matched)
+        {
+            int j = uvCounter++;
+            uniqueVertices[j] = v;
+            summedNormals[j] = n;
+            uniqueIndices[i] = j;
+        }
+    }
+
+    // Average and update normals
+    for (int i = 0; i < mesh->vertexCount; i++)
+    {
+        int j = uniqueIndices[i];
+        Vector3 n = Vector3Normalize(summedNormals[j]);
+        mesh->normals[(i + 0)*3 + 0] = n.x;
+        mesh->normals[(i + 0)*3 + 1] = n.y;
+        mesh->normals[(i + 0)*3 + 2] = n.z;
+    }
+
+    // 2=normals, see rlUpdateMeshAt()
+    rlUpdateMesh(*mesh, 2, mesh->vertexCount);
+
+    RL_FREE(uniqueVertices);
+    RL_FREE(summedNormals);
+    RL_FREE(uniqueIndices);
+
+    TRACELOG(LOG_INFO, "MESH: Normals smoothed (%d vertices, %d unique)", mesh->vertexCount, uvCounter);
+}
+
 // Draw a model (with texture if set)
 void DrawModel(Model model, Vector3 position, float scale, Color tint)
 {
@@ -2851,6 +2930,7 @@ RayHitInfo GetCollisionRayGround(Ray ray, float groundHeight)
             result.distance = distance;
             result.normal = (Vector3){ 0.0, 1.0, 0.0 };
             result.position = Vector3Add(ray.position, Vector3Scale(ray.direction, distance));
+            result.position.y = groundHeight;
         }
     }
 
@@ -2942,19 +3022,25 @@ static Model LoadOBJ(const char *fileName)
                 for (int v = 0; v < 3; v++) { mesh.vertices[vCount + v] = attrib.vertices[idx1.v_idx*3 + v]; } vCount +=3;
                 for (int v = 0; v < 3; v++) { mesh.vertices[vCount + v] = attrib.vertices[idx2.v_idx*3 + v]; } vCount +=3;
 
-                // Fill texcoords buffer (float) using vertex index of the face
-                // NOTE: Y-coordinate must be flipped upside-down
-                mesh.texcoords[vtCount + 0] = attrib.texcoords[idx0.vt_idx*2 + 0];
-                mesh.texcoords[vtCount + 1] = 1.0f - attrib.texcoords[idx0.vt_idx*2 + 1]; vtCount += 2;
-                mesh.texcoords[vtCount + 0] = attrib.texcoords[idx1.vt_idx*2 + 0];
-                mesh.texcoords[vtCount + 1] = 1.0f - attrib.texcoords[idx1.vt_idx*2 + 1]; vtCount += 2;
-                mesh.texcoords[vtCount + 0] = attrib.texcoords[idx2.vt_idx*2 + 0];
-                mesh.texcoords[vtCount + 1] = 1.0f - attrib.texcoords[idx2.vt_idx*2 + 1]; vtCount += 2;
+                if (attrib.num_texcoords > 0)
+                {
+                    // Fill texcoords buffer (float) using vertex index of the face
+                    // NOTE: Y-coordinate must be flipped upside-down
+                    mesh.texcoords[vtCount + 0] = attrib.texcoords[idx0.vt_idx*2 + 0];
+                    mesh.texcoords[vtCount + 1] = 1.0f - attrib.texcoords[idx0.vt_idx*2 + 1]; vtCount += 2;
+                    mesh.texcoords[vtCount + 0] = attrib.texcoords[idx1.vt_idx*2 + 0];
+                    mesh.texcoords[vtCount + 1] = 1.0f - attrib.texcoords[idx1.vt_idx*2 + 1]; vtCount += 2;
+                    mesh.texcoords[vtCount + 0] = attrib.texcoords[idx2.vt_idx*2 + 0];
+                    mesh.texcoords[vtCount + 1] = 1.0f - attrib.texcoords[idx2.vt_idx*2 + 1]; vtCount += 2;
+                }
 
-                // Fill normals buffer (float) using vertex index of the face
-                for (int v = 0; v < 3; v++) { mesh.normals[vnCount + v] = attrib.normals[idx0.vn_idx*3 + v]; } vnCount +=3;
-                for (int v = 0; v < 3; v++) { mesh.normals[vnCount + v] = attrib.normals[idx1.vn_idx*3 + v]; } vnCount +=3;
-                for (int v = 0; v < 3; v++) { mesh.normals[vnCount + v] = attrib.normals[idx2.vn_idx*3 + v]; } vnCount +=3;
+                if (attrib.num_normals > 0)
+                {
+                    // Fill normals buffer (float) using vertex index of the face
+                    for (int v = 0; v < 3; v++) { mesh.normals[vnCount + v] = attrib.normals[idx0.vn_idx*3 + v]; } vnCount +=3;
+                    for (int v = 0; v < 3; v++) { mesh.normals[vnCount + v] = attrib.normals[idx1.vn_idx*3 + v]; } vnCount +=3;
+                    for (int v = 0; v < 3; v++) { mesh.normals[vnCount + v] = attrib.normals[idx2.vn_idx*3 + v]; } vnCount +=3;
+                }
             }
 
             model.meshes[m] = mesh;                 // Assign mesh data to model
@@ -3036,12 +3122,16 @@ static Model LoadOBJ(const char *fileName)
 // Load IQM mesh data
 static Model LoadIQM(const char *fileName)
 {
-    #define IQM_MAGIC       "INTERQUAKEMODEL"   // IQM file magic number
-    #define IQM_VERSION     2                   // only IQM version 2 supported
+    #define IQM_MAGIC     "INTERQUAKEMODEL" // IQM file magic number
+    #define IQM_VERSION          2          // only IQM version 2 supported
 
     #define BONE_NAME_LENGTH    32          // BoneInfo name string length
     #define MESH_NAME_LENGTH    32          // Mesh name string length
     #define MATERIAL_NAME_LENGTH 32         // Material name string length
+    
+    unsigned int fileSize = 0;
+    unsigned char *fileData = LoadFileData(fileName, &fileSize);
+    unsigned char *fileDataPtr = fileData;
 
     // IQM file structs
     //-----------------------------------------------------------------------------------
@@ -3128,13 +3218,10 @@ static Model LoadIQM(const char *fileName)
 
     Model model = { 0 };
 
-    FILE *iqmFile = NULL;
-    IQMHeader iqm;
-
-    IQMMesh *imesh;
-    IQMTriangle *tri;
-    IQMVertexArray *va;
-    IQMJoint *ijoint;
+    IQMMesh *imesh = NULL;
+    IQMTriangle *tri = NULL;
+    IQMVertexArray *va = NULL;
+    IQMJoint *ijoint = NULL;
 
     float *vertex = NULL;
     float *normal = NULL;
@@ -3142,36 +3229,33 @@ static Model LoadIQM(const char *fileName)
     char *blendi = NULL;
     unsigned char *blendw = NULL;
 
-    iqmFile = fopen(fileName, "rb");
+    // In case file can not be read, return an empty model
+    if (fileDataPtr == NULL) return model;
 
-    if (iqmFile == NULL)
-    {
-        TRACELOG(LOG_WARNING, "FILEIO: [%s] Failed to open IQM file", fileName);
-        return model;
-    }
+    // Read IQM header
+    IQMHeader *iqmHeader = (IQMHeader *)fileDataPtr;
 
-    fread(&iqm, sizeof(IQMHeader), 1, iqmFile);  // Read IQM header
-
-    if (strncmp(iqm.magic, IQM_MAGIC, sizeof(IQM_MAGIC)))
+    if (memcmp(iqmHeader->magic, IQM_MAGIC, sizeof(IQM_MAGIC)) != 0)
     {
         TRACELOG(LOG_WARNING, "MODEL: [%s] IQM file is not a valid model", fileName);
-        fclose(iqmFile);
         return model;
     }
 
-    if (iqm.version != IQM_VERSION)
+    if (iqmHeader->version != IQM_VERSION)
     {
-        TRACELOG(LOG_WARNING, "MODEL: [%s] IQM file version not supported (%i)", fileName, iqm.version);
-        fclose(iqmFile);
+        TRACELOG(LOG_WARNING, "MODEL: [%s] IQM file version not supported (%i)", fileName, iqmHeader->version);
         return model;
     }
+    
+    //fileDataPtr += sizeof(IQMHeader);       // Move file data pointer
 
     // Meshes data processing
-    imesh = RL_MALLOC(sizeof(IQMMesh)*iqm.num_meshes);
-    fseek(iqmFile, iqm.ofs_meshes, SEEK_SET);
-    fread(imesh, sizeof(IQMMesh)*iqm.num_meshes, 1, iqmFile);
+    imesh = RL_MALLOC(sizeof(IQMMesh)*iqmHeader->num_meshes);
+    //fseek(iqmFile, iqmHeader->ofs_meshes, SEEK_SET);
+    //fread(imesh, sizeof(IQMMesh)*iqmHeader->num_meshes, 1, iqmFile);
+    memcpy(imesh, fileDataPtr + iqmHeader->ofs_meshes, iqmHeader->num_meshes*sizeof(IQMMesh));
 
-    model.meshCount = iqm.num_meshes;
+    model.meshCount = iqmHeader->num_meshes;
     model.meshes = RL_CALLOC(model.meshCount, sizeof(Mesh));
 
     model.materialCount = model.meshCount;
@@ -3183,11 +3267,13 @@ static Model LoadIQM(const char *fileName)
 
     for (int i = 0; i < model.meshCount; i++)
     {
-        fseek(iqmFile, iqm.ofs_text + imesh[i].name, SEEK_SET);
-        fread(name, sizeof(char)*MESH_NAME_LENGTH, 1, iqmFile);
+        //fseek(iqmFile, iqmHeader->ofs_text + imesh[i].name, SEEK_SET);
+        //fread(name, sizeof(char)*MESH_NAME_LENGTH, 1, iqmFile);
+        memcpy(name, fileDataPtr + iqmHeader->ofs_text + imesh[i].name, MESH_NAME_LENGTH*sizeof(char));
 
-        fseek(iqmFile, iqm.ofs_text + imesh[i].material, SEEK_SET);
-        fread(material, sizeof(char)*MATERIAL_NAME_LENGTH, 1, iqmFile);
+        //fseek(iqmFile, iqmHeader->ofs_text + imesh[i].material, SEEK_SET);
+        //fread(material, sizeof(char)*MATERIAL_NAME_LENGTH, 1, iqmFile);
+        memcpy(material, fileDataPtr + iqmHeader->ofs_text + imesh[i].material, MATERIAL_NAME_LENGTH*sizeof(char));
 
         model.materials[i] = LoadMaterialDefault();
 
@@ -3214,9 +3300,10 @@ static Model LoadIQM(const char *fileName)
     }
 
     // Triangles data processing
-    tri = RL_MALLOC(iqm.num_triangles*sizeof(IQMTriangle));
-    fseek(iqmFile, iqm.ofs_triangles, SEEK_SET);
-    fread(tri, iqm.num_triangles*sizeof(IQMTriangle), 1, iqmFile);
+    tri = RL_MALLOC(iqmHeader->num_triangles*sizeof(IQMTriangle));
+    //fseek(iqmFile, iqmHeader->ofs_triangles, SEEK_SET);
+    //fread(tri, iqmHeader->num_triangles*sizeof(IQMTriangle), 1, iqmFile);
+    memcpy(tri, fileDataPtr + iqmHeader->ofs_triangles, iqmHeader->num_triangles*sizeof(IQMTriangle));
 
     for (int m = 0; m < model.meshCount; m++)
     {
@@ -3224,7 +3311,9 @@ static Model LoadIQM(const char *fileName)
 
         for (unsigned int i = imesh[m].first_triangle; i < (imesh[m].first_triangle + imesh[m].num_triangles); i++)
         {
-            // IQM triangles are stored counter clockwise, but raylib sets opengl to clockwise drawing, so we swap them around
+            // IQM triangles indexes are stored in counter-clockwise, but raylib processes the index in linear order,
+            // expecting they point to the counter-clockwise vertex triangle, so we need to reverse triangle indexes         
+            // NOTE: raylib renders vertex data in counter-clockwise order (standard convention) by default
             model.meshes[m].indices[tcounter + 2] = tri[i].vertex[0] - imesh[m].first_vertex;
             model.meshes[m].indices[tcounter + 1] = tri[i].vertex[1] - imesh[m].first_vertex;
             model.meshes[m].indices[tcounter] = tri[i].vertex[2] - imesh[m].first_vertex;
@@ -3233,21 +3322,23 @@ static Model LoadIQM(const char *fileName)
     }
 
     // Vertex arrays data processing
-    va = RL_MALLOC(iqm.num_vertexarrays*sizeof(IQMVertexArray));
-    fseek(iqmFile, iqm.ofs_vertexarrays, SEEK_SET);
-    fread(va, iqm.num_vertexarrays*sizeof(IQMVertexArray), 1, iqmFile);
+    va = RL_MALLOC(iqmHeader->num_vertexarrays*sizeof(IQMVertexArray));
+    //fseek(iqmFile, iqmHeader->ofs_vertexarrays, SEEK_SET);
+    //fread(va, iqmHeader->num_vertexarrays*sizeof(IQMVertexArray), 1, iqmFile);
+    memcpy(va, fileDataPtr + iqmHeader->ofs_vertexarrays, iqmHeader->num_vertexarrays*sizeof(IQMVertexArray));
 
-    for (unsigned int i = 0; i < iqm.num_vertexarrays; i++)
+    for (unsigned int i = 0; i < iqmHeader->num_vertexarrays; i++)
     {
         switch (va[i].type)
         {
             case IQM_POSITION:
             {
-                vertex = RL_MALLOC(iqm.num_vertexes*3*sizeof(float));
-                fseek(iqmFile, va[i].offset, SEEK_SET);
-                fread(vertex, iqm.num_vertexes*3*sizeof(float), 1, iqmFile);
+                vertex = RL_MALLOC(iqmHeader->num_vertexes*3*sizeof(float));
+                //fseek(iqmFile, va[i].offset, SEEK_SET);
+                //fread(vertex, iqmHeader->num_vertexes*3*sizeof(float), 1, iqmFile);
+                memcpy(vertex, fileDataPtr + va[i].offset, iqmHeader->num_vertexes*3*sizeof(float));
 
-                for (unsigned int m = 0; m < iqm.num_meshes; m++)
+                for (unsigned int m = 0; m < iqmHeader->num_meshes; m++)
                 {
                     int vCounter = 0;
                     for (unsigned int i = imesh[m].first_vertex*3; i < (imesh[m].first_vertex + imesh[m].num_vertexes)*3; i++)
@@ -3260,11 +3351,12 @@ static Model LoadIQM(const char *fileName)
             } break;
             case IQM_NORMAL:
             {
-                normal = RL_MALLOC(iqm.num_vertexes*3*sizeof(float));
-                fseek(iqmFile, va[i].offset, SEEK_SET);
-                fread(normal, iqm.num_vertexes*3*sizeof(float), 1, iqmFile);
+                normal = RL_MALLOC(iqmHeader->num_vertexes*3*sizeof(float));
+                //fseek(iqmFile, va[i].offset, SEEK_SET);
+                //fread(normal, iqmHeader->num_vertexes*3*sizeof(float), 1, iqmFile);
+                memcpy(normal, fileDataPtr + va[i].offset, iqmHeader->num_vertexes*3*sizeof(float));
 
-                for (unsigned int m = 0; m < iqm.num_meshes; m++)
+                for (unsigned int m = 0; m < iqmHeader->num_meshes; m++)
                 {
                     int vCounter = 0;
                     for (unsigned int i = imesh[m].first_vertex*3; i < (imesh[m].first_vertex + imesh[m].num_vertexes)*3; i++)
@@ -3277,11 +3369,12 @@ static Model LoadIQM(const char *fileName)
             } break;
             case IQM_TEXCOORD:
             {
-                text = RL_MALLOC(iqm.num_vertexes*2*sizeof(float));
-                fseek(iqmFile, va[i].offset, SEEK_SET);
-                fread(text, iqm.num_vertexes*2*sizeof(float), 1, iqmFile);
+                text = RL_MALLOC(iqmHeader->num_vertexes*2*sizeof(float));
+                //fseek(iqmFile, va[i].offset, SEEK_SET);
+                //fread(text, iqmHeader->num_vertexes*2*sizeof(float), 1, iqmFile);
+                memcpy(text, fileDataPtr + va[i].offset, iqmHeader->num_vertexes*2*sizeof(float));
 
-                for (unsigned int m = 0; m < iqm.num_meshes; m++)
+                for (unsigned int m = 0; m < iqmHeader->num_meshes; m++)
                 {
                     int vCounter = 0;
                     for (unsigned int i = imesh[m].first_vertex*2; i < (imesh[m].first_vertex + imesh[m].num_vertexes)*2; i++)
@@ -3293,11 +3386,12 @@ static Model LoadIQM(const char *fileName)
             } break;
             case IQM_BLENDINDEXES:
             {
-                blendi = RL_MALLOC(iqm.num_vertexes*4*sizeof(char));
-                fseek(iqmFile, va[i].offset, SEEK_SET);
-                fread(blendi, iqm.num_vertexes*4*sizeof(char), 1, iqmFile);
+                blendi = RL_MALLOC(iqmHeader->num_vertexes*4*sizeof(char));
+                //fseek(iqmFile, va[i].offset, SEEK_SET);
+                //fread(blendi, iqmHeader->num_vertexes*4*sizeof(char), 1, iqmFile);
+                memcpy(blendi, fileDataPtr + va[i].offset, iqmHeader->num_vertexes*4*sizeof(char));
 
-                for (unsigned int m = 0; m < iqm.num_meshes; m++)
+                for (unsigned int m = 0; m < iqmHeader->num_meshes; m++)
                 {
                     int boneCounter = 0;
                     for (unsigned int i = imesh[m].first_vertex*4; i < (imesh[m].first_vertex + imesh[m].num_vertexes)*4; i++)
@@ -3309,11 +3403,12 @@ static Model LoadIQM(const char *fileName)
             } break;
             case IQM_BLENDWEIGHTS:
             {
-                blendw = RL_MALLOC(iqm.num_vertexes*4*sizeof(unsigned char));
-                fseek(iqmFile, va[i].offset, SEEK_SET);
-                fread(blendw, iqm.num_vertexes*4*sizeof(unsigned char), 1, iqmFile);
+                blendw = RL_MALLOC(iqmHeader->num_vertexes*4*sizeof(unsigned char));
+                //fseek(iqmFile, va[i].offset, SEEK_SET);
+                //fread(blendw, iqmHeader->num_vertexes*4*sizeof(unsigned char), 1, iqmFile);
+                memcpy(blendw, fileDataPtr + va[i].offset, iqmHeader->num_vertexes*4*sizeof(unsigned char));
 
-                for (unsigned int m = 0; m < iqm.num_meshes; m++)
+                for (unsigned int m = 0; m < iqmHeader->num_meshes; m++)
                 {
                     int boneCounter = 0;
                     for (unsigned int i = imesh[m].first_vertex*4; i < (imesh[m].first_vertex + imesh[m].num_vertexes)*4; i++)
@@ -3327,20 +3422,22 @@ static Model LoadIQM(const char *fileName)
     }
 
     // Bones (joints) data processing
-    ijoint = RL_MALLOC(iqm.num_joints*sizeof(IQMJoint));
-    fseek(iqmFile, iqm.ofs_joints, SEEK_SET);
-    fread(ijoint, iqm.num_joints*sizeof(IQMJoint), 1, iqmFile);
+    ijoint = RL_MALLOC(iqmHeader->num_joints*sizeof(IQMJoint));
+    //fseek(iqmFile, iqmHeader->ofs_joints, SEEK_SET);
+    //fread(ijoint, iqmHeader->num_joints*sizeof(IQMJoint), 1, iqmFile);
+    memcpy(ijoint, fileDataPtr + iqmHeader->ofs_joints, iqmHeader->num_joints*sizeof(IQMJoint));
 
-    model.boneCount = iqm.num_joints;
-    model.bones = RL_MALLOC(iqm.num_joints*sizeof(BoneInfo));
-    model.bindPose = RL_MALLOC(iqm.num_joints*sizeof(Transform));
+    model.boneCount = iqmHeader->num_joints;
+    model.bones = RL_MALLOC(iqmHeader->num_joints*sizeof(BoneInfo));
+    model.bindPose = RL_MALLOC(iqmHeader->num_joints*sizeof(Transform));
 
-    for (unsigned int i = 0; i < iqm.num_joints; i++)
+    for (unsigned int i = 0; i < iqmHeader->num_joints; i++)
     {
         // Bones
         model.bones[i].parent = ijoint[i].parent;
-        fseek(iqmFile, iqm.ofs_text + ijoint[i].name, SEEK_SET);
-        fread(model.bones[i].name, BONE_NAME_LENGTH*sizeof(char), 1, iqmFile);
+        //fseek(iqmFile, iqmHeader->ofs_text + ijoint[i].name, SEEK_SET);
+        //fread(model.bones[i].name, BONE_NAME_LENGTH*sizeof(char), 1, iqmFile);
+        memcpy(model.bones[i].name, fileDataPtr + iqmHeader->ofs_text + ijoint[i].name, BONE_NAME_LENGTH*sizeof(char));
 
         // Bind pose (base pose)
         model.bindPose[i].translation.x = ijoint[i].translate[0];
@@ -3369,7 +3466,8 @@ static Model LoadIQM(const char *fileName)
         }
     }
 
-    fclose(iqmFile);
+    RL_FREE(fileData);
+    
     RL_FREE(imesh);
     RL_FREE(tri);
     RL_FREE(va);
@@ -3484,7 +3582,7 @@ static Image LoadImageFromCgltfImage(cgltf_image *image, const char *texPath, Co
 
                 int width, height;
                 unsigned char *raw = stbi_load_from_memory(data, size, &width, &height, NULL, 4);
-                free(data);
+                RL_FREE(data);
 
                 rimage.data = raw;
                 rimage.width = width;
@@ -3518,7 +3616,7 @@ static Image LoadImageFromCgltfImage(cgltf_image *image, const char *texPath, Co
 
         int width, height;
         unsigned char *raw = stbi_load_from_memory(data, (int)image->buffer_view->size, &width, &height, NULL, 4);
-        free(data);
+        RL_FREE(data);
 
         rimage.data = raw;
         rimage.width = width;
@@ -3682,14 +3780,14 @@ static Model LoadGLTF(const char *fileName)
                     {
                         cgltf_accessor *acc = data->meshes[i].primitives[p].attributes[j].data;
                         model.meshes[primitiveIndex].vertexCount = (int)acc->count;
-                        model.meshes[primitiveIndex].vertices = RL_MALLOC(sizeof(float)*model.meshes[primitiveIndex].vertexCount*3);
+                        model.meshes[primitiveIndex].vertices = RL_MALLOC(model.meshes[primitiveIndex].vertexCount*3*sizeof(float));
 
                         LOAD_ACCESSOR(float, 3, acc, model.meshes[primitiveIndex].vertices)
                     }
                     else if (data->meshes[i].primitives[p].attributes[j].type == cgltf_attribute_type_normal)
                     {
                         cgltf_accessor *acc = data->meshes[i].primitives[p].attributes[j].data;
-                        model.meshes[primitiveIndex].normals = RL_MALLOC(sizeof(float)*acc->count*3);
+                        model.meshes[primitiveIndex].normals = RL_MALLOC(acc->count*3*sizeof(float));
 
                         LOAD_ACCESSOR(float, 3, acc, model.meshes[primitiveIndex].normals)
                     }
@@ -3699,7 +3797,7 @@ static Model LoadGLTF(const char *fileName)
 
                         if (acc->component_type == cgltf_component_type_r_32f)
                         {
-                            model.meshes[primitiveIndex].texcoords = RL_MALLOC(sizeof(float)*acc->count*2);
+                            model.meshes[primitiveIndex].texcoords = RL_MALLOC(acc->count*2*sizeof(float));
                             LOAD_ACCESSOR(float, 2, acc, model.meshes[primitiveIndex].texcoords)
                         }
                         else
@@ -3717,7 +3815,7 @@ static Model LoadGLTF(const char *fileName)
                     if (acc->component_type == cgltf_component_type_r_16u)
                     {
                         model.meshes[primitiveIndex].triangleCount = (int)acc->count/3;
-                        model.meshes[primitiveIndex].indices = RL_MALLOC(sizeof(unsigned short)*model.meshes[primitiveIndex].triangleCount*3);
+                        model.meshes[primitiveIndex].indices = RL_MALLOC(model.meshes[primitiveIndex].triangleCount*3*sizeof(unsigned short));
                         LOAD_ACCESSOR(unsigned short, 1, acc, model.meshes[primitiveIndex].indices)
                     }
                     else

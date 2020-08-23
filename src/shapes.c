@@ -618,6 +618,8 @@ void DrawRectangleRec(Rectangle rec, Color color)
 // Draw a color-filled rectangle with pro parameters
 void DrawRectanglePro(Rectangle rec, Vector2 origin, float rotation, Color color)
 {
+    if (rlCheckBufferLimit(4)) rlglDraw();
+    
     rlEnableTexture(GetShapesTexture().id);
 
     rlPushMatrix();
@@ -1244,6 +1246,7 @@ void DrawTriangleLines(Vector2 v1, Vector2 v2, Vector2 v3, Color color)
 
 // Draw a triangle fan defined by points
 // NOTE: First vertex provided is the center, shared by all triangles
+// By default, following vertex should be provided in counter-clockwise order
 void DrawTriangleFan(Vector2 *points, int pointsCount, Color color)
 {
     if (pointsCount >= 3)
