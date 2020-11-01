@@ -32,7 +32,7 @@ RAYLIB_PATH        ?= ..
 # Define default options
 
 # One of PLATFORM_DESKTOP, PLATFORM_RPI, PLATFORM_ANDROID, PLATFORM_WEB
-PLATFORM           ?= PLATFORM_DESKTOP
+PLATFORM           ?= PLATFORM_RPI
 
 # Locations of your newly installed library and associated headers. See ../src/Makefile
 # On Linux, if you have installed raylib but cannot compile the examples, check that
@@ -110,7 +110,7 @@ endif
 # This is not currently used by src/Makefile. Not sure of its origin or usage. Refer to wiki.
 # TODO: update install: target in src/Makefile for RPI, consider relation to LINUX.
 ifeq ($(PLATFORM),PLATFORM_RPI)
-    RAYLIB_PATH       ?= /home/pi/raylib
+    RAYLIB_PATH       ?= /home/pi/development/raylib
 endif
 
 ifeq ($(PLATFORM),PLATFORM_WEB)

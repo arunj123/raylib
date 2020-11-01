@@ -1353,7 +1353,7 @@ void EndDrawing(void)
 #if defined(PLATFORM_RPI) && defined(SUPPORT_MOUSE_CURSOR_RPI)
     // On RPI native mode we have no system mouse cursor, so,
     // we draw a small rectangle for user reference
-    DrawRectangle(CORE.Input.Mouse.position.x, CORE.Input.Mouse.position.y, 3, 3, MAROON);
+    //DrawRectangle(CORE.Input.Mouse.position.x, CORE.Input.Mouse.position.y, 3, 3, MAROON);
 #endif
 
     rlglDraw();                     // Draw Buffers (Only OpenGL 3+ and ES2)
