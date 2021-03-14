@@ -18,14 +18,14 @@ jobs:
       uses: actions/checkout@master
   
     - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v6
+      uses: mymindstorm/setup-emsdk@v7
       with:
         version: 2.0.0
         actions-cache-folder: 'emsdk-cache'
         
     - name: Setup Release Version
       run: |
-        echo "::set-env name=RELEASE_NAME::raylib-${{ github.event.release.tag_name }}_webassembly"
+        echo "RELEASE_NAME=raylib-${{ github.event.release.tag_name }}_webassembly" >> $GITHUB_ENV
       shell: bash
       if: github.event_name == 'release' && github.event.action == 'published'
 
@@ -49,6 +49,8 @@ jobs:
     - name: Generate Artifacts
       run: |
         copy /Y .\src\raylib.h .\build\${{ env.RELEASE_NAME }}\include\raylib.h
+        copy /Y .\README.md .\build\${{ env.RELEASE_NAME }}\README.md
+        copy /Y .\LICENSE .\build\${{ env.RELEASE_NAME }}\LICENSE
         cd build
         7z a ./${{ env.RELEASE_NAME }}.zip ./${{ env.RELEASE_NAME }}
         dir

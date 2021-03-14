@@ -33,7 +33,7 @@ jobs:
     
     - name: Setup Release Version
       run: |
-        echo "::set-env name=RELEASE_NAME::raylib-${{ github.event.release.tag_name }}_linux_${{ matrix.ARCH_NAME }}"
+        echo "RELEASE_NAME=raylib-${{ github.event.release.tag_name }}_linux_${{ matrix.ARCH_NAME }}" >> $GITHUB_ENV
       shell: bash
       if: github.event_name == 'release' && github.event.action == 'published'
       
@@ -71,6 +71,8 @@ jobs:
     - name: Generate Artifacts
       run: |
         cp -v ./src/raylib.h ./build/${{ env.RELEASE_NAME }}/include
+        cp -v ./README.md ./build/${{ env.RELEASE_NAME }}/README.md
+        cp -v ./LICENSE ./build/${{ env.RELEASE_NAME }}/LICENSE
         cd build
         tar -czvf ${{ env.RELEASE_NAME }}.tar.gz ${{ env.RELEASE_NAME }}
         

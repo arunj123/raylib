@@ -5,9 +5,9 @@
 *   This example has been created using raylib 2.6 (www.raylib.com)
 *   raylib is licensed under an unmodified zlib/libpng license (View raylib.h for details)
 *
-*   Example contributed by Chris Camacho (@codifies) and reviewed by Ramon Santamaria (@raysan5)
+*   Example contributed by Chris Camacho (@chriscamacho) and reviewed by Ramon Santamaria (@raysan5)
 *
-*   Copyright (c) 2019 Chris Camacho (@codifies) and Ramon Santamaria (@raysan5)
+*   Copyright (c) 2019 Chris Camacho (@chriscamacho) and Ramon Santamaria (@raysan5)
 *
 ********************************************************************************************/
 
@@ -27,7 +27,7 @@ int main(void)
     Sound fxWav = LoadSound("resources/sound.wav");         // Load WAV audio file
     Sound fxOgg = LoadSound("resources/target.ogg");        // Load OGG audio file
     
-    SetSoundVolume(fxWav, 0.2);
+    SetSoundVolume(fxWav, 0.2f);
 
     SetTargetFPS(60);       // Set our game to run at 60 frames-per-second
     //--------------------------------------------------------------------------------------
