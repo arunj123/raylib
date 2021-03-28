@@ -197,7 +197,7 @@
         #define GLFW_EXPOSE_NATIVE_WIN32
         #include "GLFW/glfw3native.h"       // WARNING: It requires customization to avoid windows.h inclusion!
 
-        #if !defined(SUPPORT_BUSY_WAIT_LOOP)
+        #if defined(SUPPORT_WINMM_HIGHRES_TIMER) && !defined(SUPPORT_BUSY_WAIT_LOOP)
             // NOTE: Those functions require linking with winmm library
             unsigned int __stdcall timeBeginPeriod(unsigned int uPeriod);
             unsigned int __stdcall timeEndPeriod(unsigned int uPeriod);
@@ -575,7 +575,7 @@ static int FindNearestConnectorMode(const drmModeConnector *connector, uint widt
 #endif  // PLATFORM_RPI || PLATFORM_DRM
 
 #if defined(_WIN32)
-    // NOTE: We include Sleep() function signature here to avoid windows.h inclusion
+    // NOTE: We include Sleep() function signature here to avoid windows.h inclusion (kernel32 lib)
     void __stdcall Sleep(unsigned long msTimeout);      // Required for Wait()
 #endif
 
@@ -819,7 +819,7 @@ void CloseWindow(void)
     glfwTerminate();
 #endif
 
-#if !defined(SUPPORT_BUSY_WAIT_LOOP) && defined(_WIN32) && !defined(PLATFORM_UWP)
+#if defined(_WIN32) && defined(SUPPORT_WINMM_HIGHRES_TIMER) && !defined(SUPPORT_BUSY_WAIT_LOOP) && !defined(PLATFORM_UWP)
     timeEndPeriod(1);           // Restore time period
 #endif
 
@@ -1034,34 +1034,40 @@ void ToggleFullscreen(void)
         // Store previous window position (in case we exit fullscreen)
         glfwGetWindowPos(CORE.Window.handle, &CORE.Window.position.x, &CORE.Window.position.y);
 
-        GLFWmonitor *monitor = glfwGetWindowMonitor(CORE.Window.handle);
+        int monitorCount = 0;
+		GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
+
+        int monitorIndex = GetCurrentMonitor();
+        // use GetCurrentMonitor so we correctly get the display the window is on
+        GLFWmonitor* monitor = monitorIndex < monitorCount ?  monitors[monitorIndex] : NULL;
+
         if (!monitor)
         {
             TRACELOG(LOG_WARNING, "GLFW: Failed to get monitor");
-            glfwSetWindowSizeCallback(CORE.Window.handle, NULL);
-            glfwSetWindowMonitor(CORE.Window.handle, glfwGetPrimaryMonitor(), 0, 0, CORE.Window.screen.width, CORE.Window.screen.height, GLFW_DONT_CARE);
-            glfwSetWindowSizeCallback(CORE.Window.handle, WindowSizeCallback);
+    
+            CORE.Window.fullscreen = false;          // Toggle fullscreen flag
+            CORE.Window.flags &= ~FLAG_FULLSCREEN_MODE;
+            
+            glfwSetWindowMonitor(CORE.Window.handle, NULL, 0, 0, CORE.Window.screen.width, CORE.Window.screen.height, GLFW_DONT_CARE);
             return;
         }
     
-        const GLFWvidmode *mode = glfwGetVideoMode(monitor);
-        glfwSetWindowSizeCallback(CORE.Window.handle, NULL);
+        CORE.Window.fullscreen = true;          // Toggle fullscreen flag
+        CORE.Window.flags |= FLAG_FULLSCREEN_MODE;
+        
         glfwSetWindowMonitor(CORE.Window.handle, monitor, 0, 0, CORE.Window.screen.width, CORE.Window.screen.height, GLFW_DONT_CARE);
-        glfwSetWindowSizeCallback(CORE.Window.handle, WindowSizeCallback);
-
-        // Try to enable GPU V-Sync, so frames are limited to screen refresh rate (60Hz -> 60 FPS)
-        // NOTE: V-Sync can be enabled by graphic driver configuration
-        if (CORE.Window.flags & FLAG_VSYNC_HINT) glfwSwapInterval(1);
     }
     else
     {
-        glfwSetWindowSizeCallback(CORE.Window.handle, NULL);
+        CORE.Window.fullscreen = false;          // Toggle fullscreen flag
+        CORE.Window.flags &= ~FLAG_FULLSCREEN_MODE;
+        
         glfwSetWindowMonitor(CORE.Window.handle, NULL, CORE.Window.position.x, CORE.Window.position.y, CORE.Window.screen.width, CORE.Window.screen.height, GLFW_DONT_CARE);
-        glfwSetWindowSizeCallback(CORE.Window.handle, WindowSizeCallback);
     }
 
-    CORE.Window.fullscreen = !CORE.Window.fullscreen;          // Toggle fullscreen flag
-    CORE.Window.flags ^= FLAG_FULLSCREEN_MODE;
+	// Try to enable GPU V-Sync, so frames are limited to screen refresh rate (60Hz -> 60 FPS)
+    // NOTE: V-Sync can be enabled by graphic driver configuration
+    if (CORE.Window.flags & FLAG_VSYNC_HINT) glfwSwapInterval(1);
 
 #endif
 #if defined(PLATFORM_WEB)
@@ -1350,7 +1356,7 @@ void ClearWindowState(unsigned int flags)
 void SetWindowIcon(Image image)
 {
 #if defined(PLATFORM_DESKTOP)
-    if (image.format == UNCOMPRESSED_R8G8B8A8)
+    if (image.format == PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
     {
         GLFWimage icon[1] = { 0 };
 
@@ -2252,7 +2258,7 @@ void SetConfigFlags(unsigned int flags)
 void TakeScreenshot(const char *fileName)
 {
     unsigned char *imgData = rlReadScreenPixels(CORE.Window.render.width, CORE.Window.render.height);
-    Image image = { imgData, CORE.Window.render.width, CORE.Window.render.height, 1, UNCOMPRESSED_R8G8B8A8 };
+    Image image = { imgData, CORE.Window.render.width, CORE.Window.render.height, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
 
     char path[512] = { 0 };
 #if defined(PLATFORM_ANDROID)
@@ -2707,7 +2713,7 @@ bool SaveStorageValue(unsigned int position, int value)
         dataPtr[position] = value;
 
         success = SaveFileData(path, fileData, dataSize);
-        RL_FREE(fileData);
+        UnloadFileData(fileData);
     }
 #endif
 
@@ -2800,7 +2806,7 @@ int LoadStorageValue(unsigned int position)
             value = dataPtr[position];
         }
 
-        RL_FREE(fileData);
+        UnloadFileData(fileData);
     }
 #endif
     return value;
@@ -4252,10 +4258,14 @@ static void SetupFramebuffer(int width, int height)
 // Initialize hi-resolution timer
 static void InitTimer(void)
 {
-    srand((unsigned int)time(NULL));              // Initialize random seed
+    srand((unsigned int)time(NULL));    // Initialize random seed
 
-#if !defined(SUPPORT_BUSY_WAIT_LOOP) && defined(_WIN32) && !defined(PLATFORM_UWP)
-    timeBeginPeriod(1);             // Setup high-resolution timer to 1ms (granularity of 1-2 ms)
+// Setting a higher resolution can improve the accuracy of time-out intervals in wait functions. 
+// However, it can also reduce overall system performance, because the thread scheduler switches tasks more often. 
+// High resolutions can also prevent the CPU power management system from entering power-saving modes. 
+// Setting a higher resolution does not improve the accuracy of the high-resolution performance counter.
+#if defined(_WIN32) && defined(SUPPORT_WINMM_HIGHRES_TIMER) && !defined(SUPPORT_BUSY_WAIT_LOOP) && !defined(PLATFORM_UWP)
+    timeBeginPeriod(1);                 // Setup high-resolution timer to 1ms (granularity of 1-2 ms)
 #endif
 
 #if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM)
@@ -4268,7 +4278,7 @@ static void InitTimer(void)
     else TRACELOG(LOG_WARNING, "TIMER: Hi-resolution timer not available");
 #endif
 
-    CORE.Time.previous = GetTime();       // Get time as double
+    CORE.Time.previous = GetTime();     // Get time as double
 }
 
 // Wait for some milliseconds (stop program execution)
@@ -4667,16 +4677,18 @@ static void ErrorCallback(int error, const char *description)
 static void WindowSizeCallback(GLFWwindow *window, int width, int height)
 {
     SetupViewport(width, height);    // Reset viewport and projection matrix for new size
-
+    CORE.Window.currentFbo.width = width;
+    CORE.Window.currentFbo.height = height;
+    CORE.Window.resizedLastFrame = true;
+    
+    if(IsWindowFullscreen())
+        return;
+    
     // Set current screen size
     CORE.Window.screen.width = width;
     CORE.Window.screen.height = height;
-    CORE.Window.currentFbo.width = width;
-    CORE.Window.currentFbo.height = height;
-
     // NOTE: Postprocessing texture is not scaled to new size
 
-    CORE.Window.resizedLastFrame = true;
 }
 
 // GLFW3 WindowIconify Callback, runs when window is minimized/restored
