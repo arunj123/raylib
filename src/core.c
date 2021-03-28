@@ -1821,7 +1821,7 @@ void EndDrawing(void)
     // we draw a small rectangle for user reference
     if (!CORE.Input.Mouse.cursorHidden)
     {
-        DrawRectangle(CORE.Input.Mouse.position.x, CORE.Input.Mouse.position.y, 3, 3, MAROON);
+        //DrawRectangle(CORE.Input.Mouse.position.x, CORE.Input.Mouse.position.y, 3, 3, MAROON);
     }
 #endif
 
@@ -2720,12 +2720,12 @@ bool SaveStorageValue(unsigned int position, int value)
     return success;
 }
 
-#if ((defined(PLATFORM_RPI) || defined(PLATFORM_DRM))
+#if (defined(PLATFORM_RPI) || defined(PLATFORM_DRM))
 
 EGLImageKHR CreateEglImageKHR(Texture2D *t) {
 
     t->mipmaps = 1;
-    t->format = UNCOMPRESSED_R8G8B8A8;
+    t->format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
 
     // Generate a texture object
     glGenTextures ( 1, &t->id );
@@ -3734,7 +3734,7 @@ static bool InitGraphicsDevice(int width, int height)
 #if defined(PLATFORM_DRM)
         EGL_ALPHA_SIZE, 8,        // ALPHA bit depth (required for transparent framebuffer)
 #endif
-        //EGL_TRANSPARENT_TYPE, EGL_NONE, // Request transparent framebuffer (EGL_TRANSPARENT_RGB does not work on RPI)
+        EGL_TRANSPARENT_TYPE, EGL_NONE, // Request transparent framebuffer (EGL_TRANSPARENT_RGB does not work on RPI)
         EGL_DEPTH_SIZE, 16,         // Depth buffer size (Required to use Depth testing!)
         //EGL_STENCIL_SIZE, 8,      // Stencil buffer size
         EGL_SAMPLE_BUFFERS, sampleBuffer,    // Activate MSAA
@@ -4059,17 +4059,22 @@ static bool InitGraphicsDevice(int width, int height)
     // NOTE: RPI dispmanx windowing system takes care of source rectangle scaling to destination rectangle by hardware (no cost)
     // Take care that renderWidth/renderHeight fit on displayWidth/displayHeight aspect ratio
 
+	DISPMANX_CLAMP_T clamp;
+	memset(&clamp, 0x0, sizeof(DISPMANX_CLAMP_T));
+
+
     VC_DISPMANX_ALPHA_T alpha;
     alpha.flags = DISPMANX_FLAGS_ALPHA_FIXED_ALL_PIXELS;
     //alpha.flags = DISPMANX_FLAGS_ALPHA_FROM_SOURCE;       // TODO: Allow transparent framebuffer! -> FLAG_WINDOW_TRANSPARENT
-    alpha.opacity = 255;    // Set transparency level for framebuffer, requires EGLAttrib: EGL_TRANSPARENT_TYPE
+	alpha.flags = DISPMANX_FLAGS_ALPHA_FROM_SOURCE;
+    alpha.opacity = 200;    // Set transparency level for framebuffer, requires EGLAttrib: EGL_TRANSPARENT_TYPE
     alpha.mask = 0;
 
     dispmanDisplay = vc_dispmanx_display_open(0);   // LCD
     dispmanUpdate = vc_dispmanx_update_start(0);
 
-    dispmanElement = vc_dispmanx_element_add(dispmanUpdate, dispmanDisplay, 0/*layer*/, &dstRect, 0/*src*/,
-                                            &srcRect, DISPMANX_PROTECTION_NONE, &alpha, 0/*clamp*/, DISPMANX_NO_ROTATE);
+    dispmanElement = vc_dispmanx_element_add(dispmanUpdate, dispmanDisplay, 10/*layer*/, &dstRect, 0/*src*/,
+                                            &srcRect, DISPMANX_PROTECTION_NONE, &alpha, &clamp, DISPMANX_NO_ROTATE);
 
     CORE.Window.handle.element = dispmanElement;
     CORE.Window.handle.width = CORE.Window.render.width;
