@@ -345,7 +345,7 @@ Image LoadImageFromMemory(const char *fileType, const unsigned char *fileData, i
 #endif
     }
 #if defined(SUPPORT_FILEFORMAT_HDR)
-    else if (TextIsEqual(fileExtLower, "hdr"))
+    else if (TextIsEqual(fileExtLower, ".hdr"))
     {
 #if defined(STBI_REQUIRED)
         if (fileData != NULL)
@@ -368,19 +368,19 @@ Image LoadImageFromMemory(const char *fileType, const unsigned char *fileData, i
     }
 #endif
 #if defined(SUPPORT_FILEFORMAT_DDS)
-    else if (TextIsEqual(fileExtLower, "dds")) image = LoadDDS(fileData, dataSize);
+    else if (TextIsEqual(fileExtLower, ".dds")) image = LoadDDS(fileData, dataSize);
 #endif
 #if defined(SUPPORT_FILEFORMAT_PKM)
-    else if (TextIsEqual(fileExtLower, "pkm")) image = LoadPKM(fileData, dataSize);
+    else if (TextIsEqual(fileExtLower, ".pkm")) image = LoadPKM(fileData, dataSize);
 #endif
 #if defined(SUPPORT_FILEFORMAT_KTX)
-    else if (TextIsEqual(fileExtLower, "ktx")) image = LoadKTX(fileData, dataSize);
+    else if (TextIsEqual(fileExtLower, ".ktx")) image = LoadKTX(fileData, dataSize);
 #endif
 #if defined(SUPPORT_FILEFORMAT_PVR)
-    else if (TextIsEqual(fileExtLower, "pvr")) image = LoadPVR(fileData, dataSize);
+    else if (TextIsEqual(fileExtLower, ".pvr")) image = LoadPVR(fileData, dataSize);
 #endif
 #if defined(SUPPORT_FILEFORMAT_ASTC)
-    else if (TextIsEqual(fileExtLower, "astc")) image = LoadASTC(fileData, dataSize);
+    else if (TextIsEqual(fileExtLower, ".astc")) image = LoadASTC(fileData, dataSize);
 #endif
     else TRACELOG(LOG_WARNING, "IMAGE: File format not supported");
 
@@ -703,7 +703,7 @@ Image GenImageCellular(int width, int height, int tileSize)
 
     int seedsPerRow = width/tileSize;
     int seedsPerCol = height/tileSize;
-    int seedsCount = seedsPerRow * seedsPerCol;
+    int seedsCount = seedsPerRow*seedsPerCol;
 
     Vector2 *seeds = (Vector2 *)RL_MALLOC(seedsCount*sizeof(Vector2));
 
@@ -1811,7 +1811,7 @@ void ImageColorTint(Image *image, Color color)
     {
         for (int x = 0; x < image->width; x++)
         {
-            int index = y * image->width + x;
+            int index = y*image->width + x;
             unsigned char r = (unsigned char)(((float)pixels[index].r/255*cR)*255.0f);
             unsigned char g = (unsigned char)(((float)pixels[index].g/255*cG)*255.0f);
             unsigned char b = (unsigned char)(((float)pixels[index].b/255*cB)*255.0f);
@@ -2744,29 +2744,29 @@ Texture2D LoadTextureFromImage(Image image)
 }
 
 // Load cubemap from image, multiple image cubemap layouts supported
-TextureCubemap LoadTextureCubemap(Image image, int layoutType)
+TextureCubemap LoadTextureCubemap(Image image, int layout)
 {
     TextureCubemap cubemap = { 0 };
 
-    if (layoutType == CUBEMAP_LAYOUT_AUTO_DETECT)      // Try to automatically guess layout type
+    if (layout == CUBEMAP_LAYOUT_AUTO_DETECT)      // Try to automatically guess layout type
     {
         // Check image width/height to determine the type of cubemap provided
         if (image.width > image.height)
         {
-            if ((image.width/6) == image.height) { layoutType = CUBEMAP_LAYOUT_LINE_HORIZONTAL; cubemap.width = image.width/6; }
-            else if ((image.width/4) == (image.height/3)) { layoutType = CUBEMAP_LAYOUT_CROSS_FOUR_BY_THREE; cubemap.width = image.width/4; }
-            else if (image.width >= (int)((float)image.height*1.85f)) { layoutType = CUBEMAP_LAYOUT_PANORAMA; cubemap.width = image.width/4; }
+            if ((image.width/6) == image.height) { layout = CUBEMAP_LAYOUT_LINE_HORIZONTAL; cubemap.width = image.width/6; }
+            else if ((image.width/4) == (image.height/3)) { layout = CUBEMAP_LAYOUT_CROSS_FOUR_BY_THREE; cubemap.width = image.width/4; }
+            else if (image.width >= (int)((float)image.height*1.85f)) { layout = CUBEMAP_LAYOUT_PANORAMA; cubemap.width = image.width/4; }
         }
         else if (image.height > image.width)
         {
-            if ((image.height/6) == image.width) { layoutType = CUBEMAP_LAYOUT_LINE_VERTICAL; cubemap.width = image.height/6; }
-            else if ((image.width/3) == (image.height/4)) { layoutType = CUBEMAP_LAYOUT_CROSS_THREE_BY_FOUR; cubemap.width = image.width/3; }
+            if ((image.height/6) == image.width) { layout = CUBEMAP_LAYOUT_LINE_VERTICAL; cubemap.width = image.height/6; }
+            else if ((image.width/3) == (image.height/4)) { layout = CUBEMAP_LAYOUT_CROSS_THREE_BY_FOUR; cubemap.width = image.width/3; }
         }
 
         cubemap.height = cubemap.width;
     }
 
-    if (layoutType != CUBEMAP_LAYOUT_AUTO_DETECT)
+    if (layout != CUBEMAP_LAYOUT_AUTO_DETECT)
     {
         int size = cubemap.width;
 
@@ -2774,20 +2774,20 @@ TextureCubemap LoadTextureCubemap(Image image, int layoutType)
         Rectangle faceRecs[6] = { 0 };      // Face source rectangles
         for (int i = 0; i < 6; i++) faceRecs[i] = (Rectangle){ 0, 0, (float)size, (float)size };
 
-        if (layoutType == CUBEMAP_LAYOUT_LINE_VERTICAL)
+        if (layout == CUBEMAP_LAYOUT_LINE_VERTICAL)
         {
             faces = image;
             for (int i = 0; i < 6; i++) faceRecs[i].y = (float)size*i;
         }
-        else if (layoutType == CUBEMAP_LAYOUT_PANORAMA)
+        else if (layout == CUBEMAP_LAYOUT_PANORAMA)
         {
             // TODO: Convert panorama image to square faces...
             // Ref: https://github.com/denivip/panorama/blob/master/panorama.cpp
         }
         else
         {
-            if (layoutType == CUBEMAP_LAYOUT_LINE_HORIZONTAL) for (int i = 0; i < 6; i++) faceRecs[i].x = (float)size*i;
-            else if (layoutType == CUBEMAP_LAYOUT_CROSS_THREE_BY_FOUR)
+            if (layout == CUBEMAP_LAYOUT_LINE_HORIZONTAL) for (int i = 0; i < 6; i++) faceRecs[i].x = (float)size*i;
+            else if (layout == CUBEMAP_LAYOUT_CROSS_THREE_BY_FOUR)
             {
                 faceRecs[0].x = (float)size; faceRecs[0].y = (float)size;
                 faceRecs[1].x = (float)size; faceRecs[1].y = (float)size*3;
@@ -2796,7 +2796,7 @@ TextureCubemap LoadTextureCubemap(Image image, int layoutType)
                 faceRecs[4].x = 0; faceRecs[4].y = (float)size;
                 faceRecs[5].x = (float)size*2; faceRecs[5].y = (float)size;
             }
-            else if (layoutType == CUBEMAP_LAYOUT_CROSS_FOUR_BY_THREE)
+            else if (layout == CUBEMAP_LAYOUT_CROSS_FOUR_BY_THREE)
             {
                 faceRecs[0].x = (float)size*2; faceRecs[0].y = (float)size;
                 faceRecs[1].x = 0; faceRecs[1].y = (float)size;
@@ -2950,6 +2950,12 @@ Image GetScreenData(void)
     return image;
 }
 
+// Define default texture used to draw shapes
+void SetShapesTexture(Texture2D texture, Rectangle source)
+{
+    rlSetShapesTexture(texture, source);
+}
+
 //------------------------------------------------------------------------------------
 // Texture configuration functions
 //------------------------------------------------------------------------------------
@@ -2962,9 +2968,9 @@ void GenTextureMipmaps(Texture2D *texture)
 }
 
 // Set texture scaling filter mode
-void SetTextureFilter(Texture2D texture, int filterMode)
+void SetTextureFilter(Texture2D texture, int filter)
 {
-    switch (filterMode)
+    switch (filter)
     {
         case TEXTURE_FILTER_POINT:
         {
@@ -3028,9 +3034,9 @@ void SetTextureFilter(Texture2D texture, int filterMode)
 }
 
 // Set texture wrapping mode
-void SetTextureWrap(Texture2D texture, int wrapMode)
+void SetTextureWrap(Texture2D texture, int wrap)
 {
-    switch (wrapMode)
+    switch (wrap)
     {
         case TEXTURE_WRAP_REPEAT:
         {
@@ -3105,10 +3111,10 @@ void DrawTextureQuad(Texture2D texture, Vector2 tiling, Vector2 offset, Rectangl
 // NOTE: For tilling a whole texture DrawTextureQuad() is better
 void DrawTextureTiled(Texture2D texture, Rectangle source, Rectangle dest, Vector2 origin, float rotation, float scale, Color tint)
 {
-    if (texture.id <= 0 || scale <= 0.0f) return;  // Wanna see a infinite loop?!...just delete this line!
+    if ((texture.id <= 0) || (scale <= 0.0f)) return;  // Wanna see a infinite loop?!...just delete this line!
 
     int tileWidth = (int)(source.width*scale), tileHeight = (int)(source.height*scale);
-    if (dest.width < tileWidth && dest.height < tileHeight)
+    if ((dest.width < tileWidth) && (dest.height < tileHeight))
     {
         // Can fit only one tile
         DrawTexturePro(texture, (Rectangle){source.x, source.y, ((float)dest.width/tileWidth)*source.width, ((float)dest.height/tileHeight)*source.height},
@@ -3200,11 +3206,82 @@ void DrawTexturePro(Texture2D texture, Rectangle source, Rectangle dest, Vector2
         if (source.width < 0) { flipX = true; source.width *= -1; }
         if (source.height < 0) source.y -= source.height;
 
-        rlEnableTexture(texture.id);
+        Vector2 topLeft = { 0 };
+        Vector2 topRight = { 0 };
+        Vector2 bottomLeft = { 0 };
+        Vector2 bottomRight = { 0 };
 
+        // Only calculate rotation if needed
+        if (rotation == 0.0f)
+        {
+            float x = dest.x - origin.x;
+            float y = dest.y - origin.y;
+            topLeft = (Vector2){ x, y };
+            topRight = (Vector2){ x + dest.width, y };
+            bottomLeft = (Vector2){ x, y + dest.height };
+            bottomRight = (Vector2){ x + dest.width, y + dest.height };
+        }
+        else
+        {
+            float sinRotation = sinf(rotation*DEG2RAD);
+            float cosRotation = cosf(rotation*DEG2RAD);
+            float x = dest.x;
+            float y = dest.y;
+            float dx = -origin.x;
+            float dy = -origin.y;
+
+            topLeft.x = x + dx*cosRotation - dy*sinRotation;
+            topLeft.y = y + dx*sinRotation + dy*cosRotation;
+
+            topRight.x = x + (dx + dest.width)*cosRotation - dy*sinRotation;
+            topRight.y = y + (dx + dest.width)*sinRotation + dy*cosRotation;
+
+            bottomLeft.x = x + dx*cosRotation - (dy + dest.height)*sinRotation;
+            bottomLeft.y = y + dx*sinRotation + (dy + dest.height)*cosRotation;
+
+            bottomRight.x = x + (dx + dest.width)*cosRotation - (dy + dest.height)*sinRotation;
+            bottomRight.y = y + (dx + dest.width)*sinRotation + (dy + dest.height)*cosRotation;
+        }
+
+        rlSetTexture(texture.id);
+        rlBegin(RL_QUADS);
+
+            rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+            rlNormal3f(0.0f, 0.0f, 1.0f);                          // Normal vector pointing towards viewer
+
+            // Top-left corner for texture and quad
+            if (flipX) rlTexCoord2f((source.x + source.width)/width, source.y/height);
+            else rlTexCoord2f(source.x/width, source.y/height);
+            rlVertex2f(topLeft.x, topLeft.y);
+
+            // Bottom-left corner for texture and quad
+            if (flipX) rlTexCoord2f((source.x + source.width)/width, (source.y + source.height)/height);
+            else rlTexCoord2f(source.x/width, (source.y + source.height)/height);
+            rlVertex2f(bottomLeft.x, bottomLeft.y);
+
+            // Bottom-right corner for texture and quad
+            if (flipX) rlTexCoord2f(source.x/width, (source.y + source.height)/height);
+            else rlTexCoord2f((source.x + source.width)/width, (source.y + source.height)/height);
+            rlVertex2f(bottomRight.x, bottomRight.y);
+
+            // Top-right corner for texture and quad
+            if (flipX) rlTexCoord2f(source.x/width, source.y/height);
+            else rlTexCoord2f((source.x + source.width)/width, source.y/height);
+            rlVertex2f(topRight.x, topRight.y);
+
+        rlEnd();
+        rlSetTexture(0);
+
+        // NOTE: Vertex position can be transformed using matrices
+        // but the process is way more costly than just calculating
+        // the vertex positions manually, like done above.
+        // I leave here the old implementation for educational pourposes,
+        // just in case someone wants to do some performance test
+        /*
+        rlSetTexture(texture.id);
         rlPushMatrix();
             rlTranslatef(dest.x, dest.y, 0.0f);
-            rlRotatef(rotation, 0.0f, 0.0f, 1.0f);
+            if (rotation != 0.0f) rlRotatef(rotation, 0.0f, 0.0f, 1.0f);
             rlTranslatef(-origin.x, -origin.y, 0.0f);
 
             rlBegin(RL_QUADS);
@@ -3232,8 +3309,8 @@ void DrawTexturePro(Texture2D texture, Rectangle source, Rectangle dest, Vector2
                 rlVertex2f(dest.width, 0.0f);
             rlEnd();
         rlPopMatrix();
-
-        rlDisableTexture();
+        rlSetTexture(0);
+        */
     }
 }
 
@@ -3250,8 +3327,8 @@ void DrawTextureNPatch(Texture2D texture, NPatchInfo nPatchInfo, Rectangle dest,
 
         if (nPatchInfo.source.width < 0) nPatchInfo.source.x -= nPatchInfo.source.width;
         if (nPatchInfo.source.height < 0) nPatchInfo.source.y -= nPatchInfo.source.height;
-        if (nPatchInfo.type == NPATCH_THREE_PATCH_HORIZONTAL) patchHeight = nPatchInfo.source.height;
-        if (nPatchInfo.type == NPATCH_THREE_PATCH_VERTICAL) patchWidth = nPatchInfo.source.width;
+        if (nPatchInfo.layout == NPATCH_THREE_PATCH_HORIZONTAL) patchHeight = nPatchInfo.source.height;
+        if (nPatchInfo.layout == NPATCH_THREE_PATCH_VERTICAL) patchWidth = nPatchInfo.source.width;
 
         bool drawCenter = true;
         bool drawMiddle = true;
@@ -3261,14 +3338,14 @@ void DrawTextureNPatch(Texture2D texture, NPatchInfo nPatchInfo, Rectangle dest,
         float bottomBorder = (float)nPatchInfo.bottom;
 
         // adjust the lateral (left and right) border widths in case patchWidth < texture.width
-        if (patchWidth <= (leftBorder + rightBorder) && nPatchInfo.type != NPATCH_THREE_PATCH_VERTICAL)
+        if (patchWidth <= (leftBorder + rightBorder) && nPatchInfo.layout != NPATCH_THREE_PATCH_VERTICAL)
         {
             drawCenter = false;
             leftBorder = (leftBorder/(leftBorder + rightBorder))*patchWidth;
             rightBorder = patchWidth - leftBorder;
         }
         // adjust the lateral (top and bottom) border heights in case patchHeight < texture.height
-        if (patchHeight <= (topBorder + bottomBorder) && nPatchInfo.type != NPATCH_THREE_PATCH_HORIZONTAL)
+        if (patchHeight <= (topBorder + bottomBorder) && nPatchInfo.layout != NPATCH_THREE_PATCH_HORIZONTAL)
         {
             drawMiddle = false;
             topBorder = (topBorder/(topBorder + bottomBorder))*patchHeight;
@@ -3295,7 +3372,7 @@ void DrawTextureNPatch(Texture2D texture, NPatchInfo nPatchInfo, Rectangle dest,
         coordD.x = (nPatchInfo.source.x + nPatchInfo.source.width)/width;
         coordD.y = (nPatchInfo.source.y + nPatchInfo.source.height)/height;
 
-        rlEnableTexture(texture.id);
+        rlSetTexture(texture.id);
 
         rlPushMatrix();
             rlTranslatef(dest.x, dest.y, 0.0f);
@@ -3306,7 +3383,7 @@ void DrawTextureNPatch(Texture2D texture, NPatchInfo nPatchInfo, Rectangle dest,
                 rlColor4ub(tint.r, tint.g, tint.b, tint.a);
                 rlNormal3f(0.0f, 0.0f, 1.0f);               // Normal vector pointing towards viewer
 
-                if (nPatchInfo.type == NPATCH_NINE_PATCH)
+                if (nPatchInfo.layout == NPATCH_NINE_PATCH)
                 {
                     // ------------------------------------------------------------
                     // TOP-LEFT QUAD
@@ -3372,7 +3449,7 @@ void DrawTextureNPatch(Texture2D texture, NPatchInfo nPatchInfo, Rectangle dest,
                     rlTexCoord2f(coordD.x, coordC.y); rlVertex2f(vertD.x, vertC.y);  // Top-right corner for texture and quad
                     rlTexCoord2f(coordC.x, coordC.y); rlVertex2f(vertC.x, vertC.y);  // Top-left corner for texture and quad
                 }
-                else if (nPatchInfo.type == NPATCH_THREE_PATCH_VERTICAL)
+                else if (nPatchInfo.layout == NPATCH_THREE_PATCH_VERTICAL)
                 {
                     // TOP QUAD
                     // -----------------------------------------------------------
@@ -3399,7 +3476,7 @@ void DrawTextureNPatch(Texture2D texture, NPatchInfo nPatchInfo, Rectangle dest,
                     rlTexCoord2f(coordD.x, coordC.y); rlVertex2f(vertD.x, vertC.y);  // Top-right corner for texture and quad
                     rlTexCoord2f(coordA.x, coordC.y); rlVertex2f(vertA.x, vertC.y);  // Top-left corner for texture and quad
                 }
-                else if (nPatchInfo.type == NPATCH_THREE_PATCH_HORIZONTAL)
+                else if (nPatchInfo.layout == NPATCH_THREE_PATCH_HORIZONTAL)
                 {
                     // LEFT QUAD
                     // -----------------------------------------------------------
@@ -3429,8 +3506,41 @@ void DrawTextureNPatch(Texture2D texture, NPatchInfo nPatchInfo, Rectangle dest,
             rlEnd();
         rlPopMatrix();
 
-        rlDisableTexture();
+        rlSetTexture(0);
     }
+}
+
+// Draw textured polygon, defined by vertex and texturecoordinates
+// NOTE: Polygon center must have straight line path to all points
+// without crossing perimeter, points must be in anticlockwise order
+void DrawTexturePoly(Texture2D texture, Vector2 center, Vector2 *points, Vector2 *texcoords, int pointsCount, Color tint)
+{
+    rlCheckRenderBatchLimit((pointsCount - 1)*4);
+
+    rlSetTexture(texture.id);
+
+    // Texturing is only supported on QUADs
+    rlBegin(RL_QUADS);
+
+        rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+
+        for (int i = 0; i < pointsCount - 1; i++)
+        {
+            rlTexCoord2f(0.5f, 0.5f);
+            rlVertex2f(center.x, center.y);
+
+            rlTexCoord2f(texcoords[i].x, texcoords[i].y);
+            rlVertex2f(points[i].x + center.x, points[i].y + center.y);
+
+            rlTexCoord2f(texcoords[i + 1].x, texcoords[i + 1].y);
+            rlVertex2f(points[i + 1].x + center.x, points[i + 1].y + center.y);
+
+            rlTexCoord2f(texcoords[i + 1].x, texcoords[i + 1].y);
+            rlVertex2f(points[i + 1].x + center.x, points[i + 1].y + center.y);
+        }
+    rlEnd();
+
+    rlSetTexture(0);
 }
 
 // Returns color with alpha applied, alpha goes from 0.0f to 1.0f

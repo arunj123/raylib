@@ -437,7 +437,8 @@ TEXTURES = \
     textures/textures_sprite_explosion \
     textures/textures_bunnymark \
     textures/textures_blend_modes \
-    textures/textures_draw_tiled
+    textures/textures_draw_tiled \
+    textures/textures_poly
 
 TEXT = \
     text/text_raylib_fonts \
@@ -449,7 +450,8 @@ TEXT = \
     text/text_input_box \
     text/text_writing_anim \
     text/text_rectangle_bounds \
-    text/text_unicode
+    text/text_unicode \
+    text/text_draw_3d
 
 MODELS = \
     models/models_animation \
@@ -485,7 +487,7 @@ SHADERS = \
     shaders/shaders_simple_mask \
     shaders/shaders_spotlight \
     shaders/shaders_hot_reloading \
-    shaders/shaders_rlgl_mesh_instanced \
+    shaders/shaders_mesh_instancing \
     shaders/shaders_multi_sample2d
 
 AUDIO = \
