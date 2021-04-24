@@ -2749,13 +2749,7 @@ EGLImageKHR CreateEglImageKHR(Texture2D *t) {
     EGLenum target = EGL_GL_TEXTURE_2D_KHR;
     EGLClientBuffer buffer = (EGLClientBuffer)t->id;
     const EGLint *attrib_list = NULL;
-    EGLImageKHR eglImage =  eglCreateImageKHR(
-                            CORE.Window.device  /* EGLDisplay dpy */,
-                            CORE.Window.context /*  EGLContext ctx */,
-                            target,
-                            buffer,
-                            attrib_list);
-
+    EGLImageKHR eglImage;
     if (eglImage == EGL_NO_IMAGE_KHR)
     {
         printf("eglCreateImageKHR failed.\n");
@@ -2767,9 +2761,6 @@ EGLImageKHR CreateEglImageKHR(Texture2D *t) {
 }
 
 void DestroyEglImageKHR(EGLImageKHR eglImage) {
-    EGLBoolean ast =  eglDestroyImageKHR(
-                        CORE.Window.device  /* EGLDisplay dpy */,
-                        eglImage);
 
 }
 #endif
