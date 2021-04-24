@@ -15,7 +15,7 @@ Ready to learn? Jump to [code examples!](http://www.raylib.com/examples.html)
 [![GitHub commits since tagged version](https://img.shields.io/github/commits-since/raysan5/raylib/3.5.0)](https://github.com/raysan5/raylib/commits/master)
 [![License](https://img.shields.io/badge/license-zlib%2Flibpng-blue.svg)](LICENSE)
 
-[![Chat on Discord](https://img.shields.io/discord/426912293134270465.svg?logo=discord)](https://discord.gg/VkzNHUE)
+[![Chat on Discord](https://img.shields.io/discord/426912293134270465.svg?logo=discord)](https://discord.gg/raylib)
 [![GitHub stars](https://img.shields.io/github/stars/raysan5/raylib?style=social)](https://github.com/raysan5/raylib/stargazers)
 [![Twitter Follow](https://img.shields.io/twitter/follow/raysan5?style=social)](https://twitter.com/raysan5)
 [![Subreddit subscribers](https://img.shields.io/reddit/subreddit-subscribers/raylib?style=social)](https://www.reddit.com/r/raylib/)
@@ -99,7 +99,6 @@ You can download and install raylib using the [conan](https://conan.io) dependen
  - [Working on Raspberry Pi](https://github.com/raysan5/raylib/wiki/Working-on-Raspberry-Pi)
  - [Working for Android](https://github.com/raysan5/raylib/wiki/Working-for-Android)
  - [Working for Web (HTML5)](https://github.com/raysan5/raylib/wiki/Working-for-Web-(HTML5))
- - [Working for UWP (Universal Window Platform)](https://github.com/raysan5/raylib/wiki/Working-for-UWP)
  - [Working anywhere with CMake](https://github.com/raysan5/raylib/wiki/Working-with-CMake)
 
 *Note that Wiki is open for edit, if you find some issue while building raylib for your target platform, feel free to edit the Wiki or open and issue related to it.*
@@ -116,14 +115,14 @@ contact
 -------
 
    * Webpage: [http://www.raylib.com](http://www.raylib.com)
-   * Discord: [https://discord.gg/raylib](https://discord.gg/VkzNHUE)
+   * Discord: [https://discord.gg/raylib](https://discord.gg/raylib)
    * Twitter: [http://www.twitter.com/raysan5](http://www.twitter.com/raysan5)
    * Twitch: [http://www.twitch.tv/raysan5](http://www.twitch.tv/raysan5)
    * Reddit: [https://www.reddit.com/r/raylib](https://www.reddit.com/r/raylib)
    * Patreon: [https://www.patreon.com/raylib](https://www.patreon.com/raylib)
-   * YouTube: [https://www.youtube.com/channel/raylib](https://www.youtube.com/channel/UC8WIBkhYb5sBNqXO1mZ7WSQ)
+   * YouTube: [https://www.youtube.com/channel/raylib](https://www.youtube.com/c/raylib)
 
-If you are using raylib and enjoying it, please, join our [Discord server](https://discord.gg/VkzNHUE) and let us know! :)
+If you are using raylib and enjoying it, please, join our [Discord server](https://discord.gg/raylib) and let us know! :)
 
 license
 -------
